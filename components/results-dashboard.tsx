@@ -2,15 +2,16 @@
 
 import type { AnalysisResult } from '@/types/audio';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from 'recharts';
-import { AlertTriangle, CheckCircle2, Activity, Volume2, Maximize, Layers, Code, LayoutDashboard, ListMusic } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Activity, Volume2, Maximize, Layers, Code, LayoutDashboard, ListMusic, BrainCircuit } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 
 interface ResultsDashboardProps {
   data: AnalysisResult;
+  onRunDeliberation?: () => void;
 }
 
-export default function ResultsDashboard({ data }: ResultsDashboardProps) {
+export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDashboardProps) {
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
   const { track_identity, whole_track_metrics, structural_flow, time_series_circuit_envelopes, physical_sections, detected_problems } = data;
 
@@ -30,19 +31,30 @@ export default function ResultsDashboard({ data }: ResultsDashboardProps) {
       {/* View Toggle */}
       <div className="flex justify-between items-center mb-2">
         <h2 className="text-xl font-mono font-bold text-white">ANALYSIS_COMPLETE</h2>
-        <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800">
-          <button
-            onClick={() => setViewMode('visual')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-mono transition-colors ${viewMode === 'visual' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-          >
-            <LayoutDashboard className="w-4 h-4" /> VISUAL
-          </button>
-          <button
-            onClick={() => setViewMode('json')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-mono transition-colors ${viewMode === 'json' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-          >
-            <Code className="w-4 h-4" /> JSON
-          </button>
+        <div className="flex items-center gap-4">
+          {onRunDeliberation && (
+            <button
+              onClick={onRunDeliberation}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition-colors"
+            >
+              <BrainCircuit className="w-4 h-4" />
+              RUN DELIBERATION
+            </button>
+          )}
+          <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800">
+            <button
+              onClick={() => setViewMode('visual')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-mono transition-colors ${viewMode === 'visual' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+              <LayoutDashboard className="w-4 h-4" /> VISUAL
+            </button>
+            <button
+              onClick={() => setViewMode('json')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-mono transition-colors ${viewMode === 'json' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+              <Code className="w-4 h-4" /> JSON
+            </button>
+          </div>
         </div>
       </div>
 
