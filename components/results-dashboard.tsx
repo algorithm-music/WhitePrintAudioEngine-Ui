@@ -5,7 +5,6 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { AlertTriangle, CheckCircle2, Activity, Volume2, Maximize, Layers, Code, LayoutDashboard, ListMusic, BrainCircuit } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { useLocale } from '@/lib/locale-context';
 
 interface ResultsDashboardProps {
   data: AnalysisResult;
@@ -13,7 +12,6 @@ interface ResultsDashboardProps {
 }
 
 export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDashboardProps) {
-  const { t } = useLocale();
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
   const { track_identity, whole_track_metrics, structural_flow, time_series_circuit_envelopes, physical_sections, detected_problems } = data;
 
@@ -32,7 +30,7 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
     <div className="max-w-7xl mx-auto p-6 space-y-6 pb-24">
       {/* View Toggle */}
       <div className="flex justify-between items-center mb-2">
-        <h2 className="text-xl font-mono font-bold text-white">{t('analysis_complete')}</h2>
+        <h2 className="text-xl font-mono font-bold text-white">ANALYSIS_COMPLETE</h2>
         <div className="flex items-center gap-4">
           {onRunDeliberation && (
             <button
@@ -40,7 +38,7 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition-colors"
             >
               <BrainCircuit className="w-4 h-4" />
-              {t('run_deliberation')}
+              RUN DELIBERATION
             </button>
           )}
           <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800">
@@ -48,13 +46,13 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
               onClick={() => setViewMode('visual')}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-mono transition-colors ${viewMode === 'visual' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
             >
-              <LayoutDashboard className="w-4 h-4" /> {t('visual')}
+              <LayoutDashboard className="w-4 h-4" /> VISUAL
             </button>
             <button
               onClick={() => setViewMode('json')}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-mono transition-colors ${viewMode === 'json' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
             >
-              <Code className="w-4 h-4" /> {t('json')}
+              <Code className="w-4 h-4" /> JSON
             </button>
           </div>
         </div>
@@ -77,21 +75,21 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
             {/* Track Identity */}
             <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5 flex flex-col">
               <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <Activity className="w-4 h-4" /> {t('track_identity')}
+                <Activity className="w-4 h-4" /> Track_Identity
               </h3>
               <div className="grid grid-cols-2 gap-4 mt-auto">
-                <MetricBox label={t('duration')} value={`${track_identity.duration_sec}s`} />
-                <MetricBox label={t('sample_rate')} value={`${track_identity.sample_rate}Hz`} />
-                <MetricBox label={t('bpm')} value={track_identity.bpm || 'N/A'} />
-                <MetricBox label={t('key')} value={track_identity.key || 'N/A'} />
-                <MetricBox label={t('bit_depth')} value={`${track_identity.bit_depth}bit`} />
+                <MetricBox label="DURATION" value={`${track_identity.duration_sec}s`} />
+                <MetricBox label="SAMPLE_RATE" value={`${track_identity.sample_rate}Hz`} />
+                <MetricBox label="BPM" value={track_identity.bpm || 'N/A'} />
+                <MetricBox label="KEY" value={track_identity.key || 'N/A'} />
+                <MetricBox label="BIT_DEPTH" value={`${track_identity.bit_depth}bit`} />
               </div>
             </div>
 
             {/* Loudness & Dynamics */}
             <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5 flex flex-col lg:col-span-2">
               <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <Volume2 className="w-4 h-4" /> {t('bs1770_metrics')}
+                <Volume2 className="w-4 h-4" /> BS.1770-4_Metrics
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-auto">
                 <MetricBox label="INT_LUFS" value={whole_track_metrics.integrated_lufs} unit="LUFS" highlight={whole_track_metrics.integrated_lufs > -10 ? 'warn' : 'normal'} />
@@ -107,7 +105,7 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
           <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                <Layers className="w-4 h-4" /> {t('time_series')}
+                <Layers className="w-4 h-4" /> Time_Series_Circuit_Envelopes
               </h3>
               <div className="flex gap-4 text-xs font-mono">
                 <span className="flex items-center gap-1 text-indigo-400"><div className="w-2 h-2 bg-indigo-400 rounded-full"/> LUFS</span>
@@ -198,12 +196,12 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
             {/* Detected Problems */}
             <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5">
               <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4" /> {t('detected_problems')}
+                <AlertTriangle className="w-4 h-4" /> Detected_Problems
               </h3>
               <div className="space-y-3">
                 {detected_problems.length === 0 ? (
                   <div className="flex items-center gap-2 text-emerald-500 font-mono text-sm p-3 bg-emerald-500/10 rounded border border-emerald-500/20">
-                    <CheckCircle2 className="w-4 h-4" /> {t('no_issues')}
+                    <CheckCircle2 className="w-4 h-4" /> NO_ENGINEERING_ISSUES_DETECTED
                   </div>
                 ) : (
                   detected_problems.map((prob, idx) => (
@@ -214,7 +212,7 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
                     }`}>
                       <div>
                         <div className="font-semibold uppercase">{prob.issue}</div>
-                        <div className="text-xs opacity-70 mt-1">{t('severity')}: {prob.severity.toUpperCase()}</div>
+                        <div className="text-xs opacity-70 mt-1">Severity: {prob.severity.toUpperCase()}</div>
                       </div>
                       <div className="font-bold">{prob.value}</div>
                     </div>
@@ -226,7 +224,7 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
             {/* Spectral Ratios */}
             <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5">
               <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <Maximize className="w-4 h-4" /> {t('spectral_dist')}
+                <Maximize className="w-4 h-4" /> Spectral_Distribution
               </h3>
               <div className="space-y-4">
                 <RatioBar label="SUB (20-60Hz)" value={whole_track_metrics.sub_ratio} color="bg-purple-500" />
@@ -241,11 +239,11 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
             {/* Physical Sections Context */}
             <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5 lg:col-span-2">
               <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <ListMusic className="w-4 h-4" /> {t('physical_sections')}
+                <ListMusic className="w-4 h-4" /> Physical_Sections_Context
               </h3>
               {structural_flow && (
                 <div className="mb-4 p-3 bg-zinc-900 rounded border border-zinc-800 font-mono text-xs text-zinc-300 overflow-x-auto whitespace-nowrap">
-                  <span className="text-zinc-500 mr-2">{t('flow')}:</span> {structural_flow}
+                  <span className="text-zinc-500 mr-2">FLOW:</span> {structural_flow}
                 </div>
               )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -254,7 +252,7 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-mono text-zinc-500">{sec.start_sec.toFixed(1)}s - {sec.end_sec.toFixed(1)}s</span>
                       <span className="text-sm font-mono font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
-                        {sec.song_structure || t('unknown')}
+                        {sec.song_structure || 'UNKNOWN'}
                       </span>
                     </div>
                     <div className="text-xs text-zinc-400 mb-2">

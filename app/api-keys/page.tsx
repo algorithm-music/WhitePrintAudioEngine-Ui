@@ -3,10 +3,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Key, Copy, RefreshCw, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
-import { useLocale } from '@/lib/locale-context';
 
 export default function ApiKeysPage() {
-  const { t } = useLocale();
   const [keys, setKeys] = useState([
     { id: '1', name: 'Production Key', key: 'wpae_live_xxxxxxxxxxxxxxxxxxxx', created: '2026-03-01', lastUsed: '2026-03-15' },
     { id: '2', name: 'Development Key', key: 'wpae_test_xxxxxxxxxxxxxxxxxxxx', created: '2026-03-10', lastUsed: 'Never' },
@@ -38,9 +36,9 @@ export default function ApiKeysPage() {
         <div>
           <h1 className="text-2xl font-mono font-bold text-white flex items-center gap-3">
             <Key className="w-6 h-6 text-indigo-400" />
-            {t('api_keys_title')}
+            API_KEYS
           </h1>
-          <p className="text-sm text-zinc-400 font-mono mt-1">{t('api_keys_sub')}</p>
+          <p className="text-sm text-zinc-400 font-mono mt-1">Manage your secret keys for the REST API.</p>
         </div>
         <button
           onClick={handleGenerate}

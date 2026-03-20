@@ -2,30 +2,21 @@
 
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import UploadScreen from '@/components/upload-screen';
 import AnalyzingScreen from '@/components/analyzing-screen';
 import ResultsDashboard from '@/components/results-dashboard';
 import DeliberatingScreen from '@/components/deliberating-screen';
 import DeliberationDashboard from '@/components/deliberation-dashboard';
 import MasteringScreen from '@/components/mastering-screen';
 import MasteringDashboard from '@/components/mastering-dashboard';
-import LandingPage from '@/components/landing-page';
 import { analyzeAudio } from '@/lib/audio-analysis';
 import { runDeliberationMock } from '@/lib/deliberation';
 import { runMasteringMock } from '@/lib/mastering';
-import { useLocale } from '@/lib/locale-context';
 import type { AnalysisResult } from '@/types/audio';
 import type { DeliberationOutput } from '@/types/deliberation';
 import type { MasteringResult } from '@/types/mastering';
-import type { Locale } from '@/lib/i18n';
-
-const LOCALES: { code: Locale; label: string }[] = [
-  { code: 'ja', label: '日本語' },
-  { code: 'en', label: 'EN' },
-  { code: 'zh', label: '中文' },
-];
 
 export default function Home() {
-  const { locale, setLocale, t } = useLocale();
   const [appState, setAppState] = useState<'idle' | 'analyzing' | 'results' | 'deliberating' | 'deliberation_results' | 'mastering' | 'mastering_results'>('idle');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [deliberationResult, setDeliberationResult] = useState<DeliberationOutput | null>(null);
@@ -102,34 +93,18 @@ export default function Home() {
               </h1>
             </div>
             <nav className="hidden md:flex items-center gap-4 text-xs font-mono">
-              <a href="/" className="text-zinc-400 hover:text-white transition-colors">{t('nav_dashboard')}</a>
-              <a href="/api-keys" className="text-zinc-400 hover:text-white transition-colors">{t('nav_api_keys')}</a>
-              <a href="/api-docs" className="text-zinc-400 hover:text-white transition-colors">{t('nav_curl_gen')}</a>
+              <a href="/" className="text-zinc-400 hover:text-white transition-colors">DASHBOARD</a>
+              <a href="/api-keys" className="text-zinc-400 hover:text-white transition-colors">API_KEYS</a>
+              <a href="/api-docs" className="text-zinc-400 hover:text-white transition-colors">CURL_GEN</a>
             </nav>
           </div>
           <div className="flex items-center gap-4">
-            {/* Language Switcher */}
-            <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-md p-0.5">
-              {LOCALES.map(({ code, label }) => (
-                <button
-                  key={code}
-                  onClick={() => setLocale(code)}
-                  className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${
-                    locale === code
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
             {(appState === 'results' || appState === 'deliberation_results' || appState === 'mastering_results') && (
               <button
                 onClick={handleReset}
                 className="text-xs font-mono text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded border border-zinc-800 hover:border-zinc-600"
               >
-                {t('new_session')}
+                [ NEW_SESSION ]
               </button>
             )}
           </div>
@@ -146,9 +121,9 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, filter: 'blur(10px)' }}
               transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-              className="absolute inset-0 overflow-y-auto"
+              className="absolute inset-0 flex items-center justify-center p-6"
             >
-              <LandingPage onUpload={handleUpload} error={error} />
+              <UploadScreen onUpload={handleUpload} error={error} />
             </motion.div>
           )}
 

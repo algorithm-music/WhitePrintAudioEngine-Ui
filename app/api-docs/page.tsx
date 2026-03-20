@@ -2,10 +2,8 @@
 
 import { useState } from 'react';
 import { Terminal, Copy, CheckCircle2, Play } from 'lucide-react';
-import { useLocale } from '@/lib/locale-context';
 
 export default function CurlGenPage() {
-  const { t } = useLocale();
   const [copied, setCopied] = useState(false);
   const [targetLufs, setTargetLufs] = useState('-14.0');
   const [targetTruePeak, setTargetTruePeak] = useState('-1.0');
@@ -31,20 +29,20 @@ export default function CurlGenPage() {
         <div>
           <h1 className="text-2xl font-mono font-bold text-white flex items-center gap-3">
             <Terminal className="w-6 h-6 text-emerald-400" />
-            {t('curl_gen_title')}
+            CURL_GENERATOR
           </h1>
-          <p className="text-sm text-zinc-400 font-mono mt-1">{t('curl_gen_sub')}</p>
+          <p className="text-sm text-zinc-400 font-mono mt-1">Generate cURL commands to interact with the Mastering API.</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Config Panel */}
         <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-6 space-y-6 h-fit">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider border-b border-zinc-800 pb-2">{t('parameters')}</h3>
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider border-b border-zinc-800 pb-2">Parameters</h3>
           
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-mono text-zinc-500 mb-2">{t('api_key_label')}</label>
+              <label className="block text-xs font-mono text-zinc-500 mb-2">API Key</label>
               <input 
                 type="text" 
                 value={apiKey}
@@ -55,7 +53,7 @@ export default function CurlGenPage() {
             </div>
             
             <div>
-              <label className="block text-xs font-mono text-zinc-500 mb-2">{t('target_lufs_label')}</label>
+              <label className="block text-xs font-mono text-zinc-500 mb-2">Target LUFS</label>
               <input 
                 type="number" 
                 step="0.1"
@@ -66,7 +64,7 @@ export default function CurlGenPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-mono text-zinc-500 mb-2">{t('target_tp_label')}</label>
+              <label className="block text-xs font-mono text-zinc-500 mb-2">Target True Peak (dBTP)</label>
               <input 
                 type="number" 
                 step="0.1"
@@ -91,7 +89,7 @@ export default function CurlGenPage() {
               className="flex items-center gap-2 text-xs font-mono text-zinc-400 hover:text-white transition-colors"
             >
               {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-              {copied ? t('copied') : t('copy')}
+              {copied ? 'COPIED' : 'COPY'}
             </button>
           </div>
           
@@ -104,7 +102,7 @@ export default function CurlGenPage() {
           <div className="mt-auto p-4 bg-zinc-900/30 border-t border-zinc-800 flex justify-end">
             <button className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm font-bold transition-colors">
               <Play className="w-4 h-4" />
-              {t('test_request')}
+              TEST REQUEST (MOCK)
             </button>
           </div>
         </div>

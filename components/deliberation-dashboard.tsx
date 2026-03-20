@@ -4,7 +4,6 @@ import type { DeliberationOutput } from '@/types/deliberation';
 import { motion } from 'framer-motion';
 import { BrainCircuit, CheckCircle2, Code, LayoutDashboard, MessageSquare, Sliders, Target, AlertTriangle, Activity, Layers, Zap } from 'lucide-react';
 import { useState } from 'react';
-import { useLocale } from '@/lib/locale-context';
 
 interface DeliberationDashboardProps {
   data: DeliberationOutput;
@@ -12,7 +11,6 @@ interface DeliberationDashboardProps {
 }
 
 export default function DeliberationDashboard({ data, onRunMastering }: DeliberationDashboardProps) {
-  const { t } = useLocale();
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
 
   return (
@@ -21,7 +19,7 @@ export default function DeliberationDashboard({ data, onRunMastering }: Delibera
       <div className="flex justify-between items-center mb-2">
         <h2 className="text-xl font-mono font-bold text-white flex items-center gap-3">
           <BrainCircuit className="w-6 h-6 text-indigo-400" />
-          {t('deliberation_complete')}
+          DELIBERATION_COMPLETE
         </h2>
         <div className="flex items-center gap-4">
           {onRunMastering && (
@@ -30,7 +28,7 @@ export default function DeliberationDashboard({ data, onRunMastering }: Delibera
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold transition-colors shadow-[0_0_15px_rgba(16,185,129,0.15)]"
             >
               <Zap className="w-4 h-4" />
-              {t('run_mastering')}
+              RUN MASTERING
             </button>
           )}
           <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800">
@@ -38,13 +36,13 @@ export default function DeliberationDashboard({ data, onRunMastering }: Delibera
               onClick={() => setViewMode('visual')}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-mono transition-colors ${viewMode === 'visual' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
             >
-              <LayoutDashboard className="w-4 h-4" /> {t('visual')}
+              <LayoutDashboard className="w-4 h-4" /> VISUAL
             </button>
             <button
               onClick={() => setViewMode('json')}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-mono transition-colors ${viewMode === 'json' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
             >
-              <Code className="w-4 h-4" /> {t('json')}
+              <Code className="w-4 h-4" /> JSON
             </button>
           </div>
         </div>
@@ -66,28 +64,29 @@ export default function DeliberationDashboard({ data, onRunMastering }: Delibera
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5 flex flex-col lg:col-span-2">
               <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <Target className="w-4 h-4" /> {t('deliberation_summary')}
+                <Target className="w-4 h-4" /> Deliberation_Summary
               </h3>
               <p className="text-sm text-zinc-300 leading-relaxed">
-                {t('strategy')}: {data.merge_strategy} &mdash; LUFS {data.target_lufs} / True Peak {data.target_true_peak} dBTP
+                Deliberation completed successfully using {data.merge_strategy} strategy.
+                Target LUFS set to {data.target_lufs} and True Peak to {data.target_true_peak} dBTP.
               </p>
             </div>
             <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5 flex flex-col">
               <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <Activity className="w-4 h-4" /> {t('deliberation_scores')}
+                <Activity className="w-4 h-4" /> Deliberation_Scores
               </h3>
               <div className="space-y-3 mt-auto">
-                <ScoreBar label={t('overall')} value={data.deliberation_score} />
-                <ScoreBar label={t('dynamics')} value={data.deliberation_score_detail.dynamics} />
-                <ScoreBar label={t('tone')} value={data.deliberation_score_detail.tone} />
+                <ScoreBar label="Overall Score" value={data.deliberation_score} />
+                <ScoreBar label="Dynamics" value={data.deliberation_score_detail.dynamics} />
+                <ScoreBar label="Tone" value={data.deliberation_score_detail.tone} />
               </div>
             </div>
           </div>
 
           {/* Adopted Parameters */}
           <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5">
-              <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Sliders className="w-4 h-4" /> {t('adopted_params')}
+            <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <Sliders className="w-4 h-4" /> Adopted_Parameters
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <MetricBox label="TARGET_LUFS" value={`${data.target_lufs} LUFS`} />
@@ -104,7 +103,7 @@ export default function DeliberationDashboard({ data, onRunMastering }: Delibera
           {/* Sage Opinions */}
           <div className="space-y-4">
             <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-              <MessageSquare className="w-4 h-4" /> {t('sage_opinions')}
+              <MessageSquare className="w-4 h-4" /> Sage_Opinions
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {data.opinions.map((opinion, index) => (
@@ -122,7 +121,7 @@ export default function DeliberationDashboard({ data, onRunMastering }: Delibera
                     "{opinion.rationale}"
                   </p>
                   <div className="space-y-2">
-                    <div className="text-xs font-mono text-zinc-500">{t('proposed_params')}:</div>
+                    <div className="text-xs font-mono text-zinc-500">Proposed Params:</div>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="bg-zinc-950 p-2 rounded text-xs font-mono text-zinc-400">
                         COMP_TH: {opinion.comp_threshold_db}
@@ -140,7 +139,7 @@ export default function DeliberationDashboard({ data, onRunMastering }: Delibera
           {/* Dynamic Mastering Sections */}
           <div className="space-y-4">
             <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-              <Layers className="w-4 h-4" /> {t('dynamic_sections')}
+              <Layers className="w-4 h-4" /> Dynamic_Mastering_Sections
             </h3>
             <div className="space-y-4">
               {data.dynamic_mastering_sections.map((section, index) => (
@@ -154,7 +153,7 @@ export default function DeliberationDashboard({ data, onRunMastering }: Delibera
                     </div>
                     {Object.keys(section.override_sources).length > 0 && (
                       <div className="flex items-center gap-1 text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded">
-                        <AlertTriangle className="w-3 h-3" /> {t('override_applied')}
+                        <AlertTriangle className="w-3 h-3" /> OVERRIDE APPLIED
                       </div>
                     )}
                   </div>
@@ -186,7 +185,7 @@ export default function DeliberationDashboard({ data, onRunMastering }: Delibera
                   )}
                   {Object.keys(section.diff_from_global).length === 0 && (
                     <div className="text-xs text-zinc-500 font-mono italic">
-                      {t('no_overrides')}
+                      No parameter overrides for this section. Using global parameters.
                     </div>
                   )}
                 </div>
