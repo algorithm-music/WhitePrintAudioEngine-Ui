@@ -9,15 +9,19 @@ import DeliberatingScreen from '@/components/deliberating-screen';
 import DeliberationDashboard from '@/components/deliberation-dashboard';
 import MasteringScreen from '@/components/mastering-screen';
 import MasteringDashboard from '@/components/mastering-dashboard';
+import LandingPage from '@/components/landing-page';
 import { analyzeAudio } from '@/lib/audio-analysis';
 import { runDeliberationMock } from '@/lib/deliberation';
 import { runMasteringMock } from '@/lib/mastering';
 import type { AnalysisResult } from '@/types/audio';
 import type { DeliberationOutput } from '@/types/deliberation';
 import type { MasteringResult } from '@/types/mastering';
+import { useLocale } from '@/lib/locale-context';
+import type { Locale } from '@/lib/i18n';
 
 export default function Home() {
-  const [appState, setAppState] = useState<'idle' | 'analyzing' | 'results' | 'deliberating' | 'deliberation_results' | 'mastering' | 'mastering_results'>('idle');
+  const { t, locale, setLocale } = useLocale();
+  const [appState, setAppState] = useState<'lp' | 'idle' | 'analyzing' | 'results' | 'deliberating' | 'deliberation_results' | 'mastering' | 'mastering_results'>('lp');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [deliberationResult, setDeliberationResult] = useState<DeliberationOutput | null>(null);
   const [masteringResult, setMasteringResult] = useState<MasteringResult | null>(null);
@@ -78,40 +82,77 @@ export default function Home() {
     }
   };
 
+  const locales: { code: Locale; label: string }[] = [
+    { code: 'ja', label: '日本語' },
+    { code: 'en', label: 'EN' },
+    { code: 'zh', label: '中文' },
+  ];
+
+  // Landing page — no header, full-page component
+  if (appState === 'lp') {
+    return (
+      <LandingPage
+        onGetStarted={() => setAppState('idle')}
+        locale={locale}
+        setLocale={setLocale}
+        locales={locales}
+      />
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-zinc-100 font-sans selection:bg-indigo-500/30 overflow-hidden flex flex-col">
       {/* Header */}
       <header className="border-b border-zinc-800/50 bg-zinc-950/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
+            <button
+              onClick={() => setAppState('lp')}
+              className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+            >
               <div className="w-6 h-6 rounded bg-indigo-500 flex items-center justify-center">
                 <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
               </div>
               <h1 className="font-mono text-sm font-semibold tracking-wider text-zinc-200">
                 RENDITION_DSP <span className="text-zinc-500 font-normal">v2.0.0</span>
               </h1>
-            </div>
+            </button>
             <nav className="hidden md:flex items-center gap-4 text-xs font-mono">
-              <a href="/" className="text-zinc-400 hover:text-white transition-colors">DASHBOARD</a>
-              <a href="/api-keys" className="text-zinc-400 hover:text-white transition-colors">API_KEYS</a>
-              <a href="/api-docs" className="text-zinc-400 hover:text-white transition-colors">CURL_GEN</a>
+              <a href="/" className="text-zinc-400 hover:text-white transition-colors">{t('nav_dashboard')}</a>
+              <a href="/api-keys" className="text-zinc-400 hover:text-white transition-colors">{t('nav_api_keys')}</a>
+              <a href="/api-docs" className="text-zinc-400 hover:text-white transition-colors">{t('nav_curl_gen')}</a>
             </nav>
           </div>
           <div className="flex items-center gap-4">
+            {/* Language switcher */}
+            <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-1">
+              {locales.map(({ code, label }) => (
+                <button
+                  key={code}
+                  onClick={() => setLocale(code)}
+                  className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${
+                    locale === code
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             {(appState === 'results' || appState === 'deliberation_results' || appState === 'mastering_results') && (
               <button
                 onClick={handleReset}
                 className="text-xs font-mono text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded border border-zinc-800 hover:border-zinc-600"
               >
-                [ NEW_SESSION ]
+                {t('new_session')}
               </button>
             )}
           </div>
         </div>
       </header>
 
-      {/* Main Content Area */}
+      {/* Main Content Area — 4-step flow fully preserved */}
       <div className="flex-1 relative">
         <AnimatePresence mode="wait">
           {appState === 'idle' && (
