@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import UploadScreen from '@/components/upload-screen';
 import AnalyzingScreen from '@/components/analyzing-screen';
 import ResultsDashboard from '@/components/results-dashboard';
 import DeliberatingScreen from '@/components/deliberating-screen';

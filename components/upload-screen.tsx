@@ -5,6 +5,7 @@ import { UploadCloud, FileAudio, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { useLocale } from '@/lib/locale-context';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -16,6 +17,7 @@ interface UploadScreenProps {
 }
 
 export default function UploadScreen({ onUpload, error }: UploadScreenProps) {
+  const { t } = useLocale();
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -48,10 +50,10 @@ export default function UploadScreen({ onUpload, error }: UploadScreenProps) {
     <div className="w-full max-w-2xl">
       <div className="mb-8 text-center space-y-2">
         <h2 className="text-3xl font-mono font-bold tracking-tighter text-white">
-          INITIALIZE_ANALYSIS
+          {t('upload_title')}
         </h2>
         <p className="text-zinc-400 font-mono text-sm">
-          Drop an audio file to begin BS.1770-4 compliant physical extraction.
+          {t('upload_sub')}
         </p>
       </div>
 
@@ -85,10 +87,10 @@ export default function UploadScreen({ onUpload, error }: UploadScreenProps) {
           
           <div className="text-center space-y-1">
             <p className="font-mono text-sm font-medium text-zinc-200">
-              {isDragging ? "DEPLOY_PAYLOAD" : "SELECT_OR_DRAG_FILE"}
+              {isDragging ? t('upload_dragging') : t('upload_drag')}
             </p>
             <p className="font-mono text-xs text-zinc-500">
-              WAV, FLAC, AIFF supported. Max 384kHz.
+              {t('upload_formats')}
             </p>
           </div>
         </div>
@@ -108,7 +110,7 @@ export default function UploadScreen({ onUpload, error }: UploadScreenProps) {
         >
           <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
           <div>
-            <h4 className="text-sm font-mono font-semibold text-red-400">ANALYSIS_FAILED</h4>
+            <h4 className="text-sm font-mono font-semibold text-red-400">{t('upload_error_title')}</h4>
             <p className="text-xs font-mono text-red-300/80 mt-1">{error}</p>
           </div>
         </motion.div>
