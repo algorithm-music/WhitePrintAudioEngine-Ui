@@ -25,6 +25,7 @@ const footerLinks = {
     { href: '/legal/privacy', label: 'Privacy Policy' },
     { href: '/legal/cookies', label: 'Cookie Policy' },
     { href: '/legal/acceptable-use', label: 'Acceptable Use' },
+    { href: '/legal/tokushoho', label: 'Tokushoho (JP)' },
   ],
 };
 

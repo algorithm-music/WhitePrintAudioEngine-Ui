@@ -49,10 +49,10 @@ export default function MarketingHeader() {
             Log in
           </Link>
           <Link
-            href="/signup"
+            href="/app"
             className="text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors px-4 py-2 rounded-lg"
           >
-            Get Started Free
+            Try Now
           </Link>
         </div>
       </div>

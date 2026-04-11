@@ -214,10 +214,10 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             Experience BS.1770-4 analysis and AI mastering on your own tracks.
           </p>
           <Link
-            href="/signup"
+            href="/app"
             className="inline-flex px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors text-sm"
           >
-            Get Started Free
+            Try It Now — Free
           </Link>
         </div>
       </article>

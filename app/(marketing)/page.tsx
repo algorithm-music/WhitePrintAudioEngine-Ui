@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { WebApplicationJsonLd, OrganizationJsonLd } from '@/components/seo/json-ld';
+import HeroUrlInput from '@/components/marketing/hero-url-input';
 
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
@@ -8,9 +9,10 @@ export const metadata: Metadata = {
 
 const features = [
   {
-    title: 'BS.1770-4 Analysis',
+    title: 'AI Reads Your Sound',
+    subtitle: 'BS.1770-4 Physical Analysis',
     description:
-      'ITU broadcast-standard loudness measurement. LUFS, true peak, LRA, crest factor, spectral analysis, and section detection in one pass.',
+      'Loudness, true peak, dynamics, spectral balance, stereo width. Broadcast-standard measurement exposes the truth of your audio in hard numbers.',
     href: '/features/analysis',
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -19,9 +21,10 @@ const features = [
     ),
   },
   {
-    title: 'Multi-LLM Deliberation',
+    title: '3 AIs Deliberate. Then Decide.',
+    subtitle: 'Multi-LLM Ensemble Engine',
     description:
-      'Three AI models (OpenAI, Anthropic, Google) independently analyze your track and vote on optimal mastering parameters. Full transparency into every decision.',
+      'OpenAI, Anthropic, Google. Three independent AIs analyze your track, debate the parameters, and reach consensus. Every recommendation, every rationale — visible.',
     href: '/features/deliberation',
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -30,9 +33,10 @@ const features = [
     ),
   },
   {
-    title: 'Automated Mastering',
+    title: 'Mastering That Moves With the Music',
+    subtitle: 'AI Dynamic DSP Chain',
     description:
-      'Professional DSP chain with 25+ parameters: EQ, compression, limiting, saturation, stereo processing. Applied automatically based on AI consensus.',
+      'Intro, verse, chorus, outro — different EQ, compression, and limiting for each section. Not static one-size-fits-all. Dynamic mastering that follows your song.',
     href: '/features/mastering',
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -43,10 +47,10 @@ const features = [
 ];
 
 const stats = [
-  { value: 'BS.1770-4', label: 'Standard Compliance' },
-  { value: '3 LLMs', label: 'Ensemble Deliberation' },
+  { value: 'BS.1770-4', label: 'Broadcast Standard' },
+  { value: '3 AIs', label: 'Deliberate Together' },
   { value: '25+', label: 'DSP Parameters' },
-  { value: 'REST API', label: 'Developer Access' },
+  { value: 'REST API', label: 'Full Automation' },
 ];
 
 export default function LandingPage() {
@@ -62,30 +66,29 @@ export default function LandingPage() {
           <div className="max-w-3xl mx-auto text-center space-y-8">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-xs text-indigo-300 font-mono">
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-              AI-Powered Audio Mastering Engine
+              AI Dynamic Mastering Engine
             </div>
             <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-white leading-tight">
-              Master your audio with{' '}
+              Listen. You&apos;ll hear it.
+              <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">
-                transparent AI
+                3 AIs deliberate. Your track evolves.
               </span>
             </h1>
             <p className="text-lg text-zinc-400 max-w-2xl mx-auto leading-relaxed">
-              BS.1770-4 compliant analysis, multi-LLM ensemble deliberation, and automated DSP
-              mastering. See exactly why every parameter was chosen.
+              Three AI models independently analyze your audio, debate the ideal parameters,
+              and reach consensus — section by section. Every decision is transparent.
+              <br />
+              Black-box mastering is over.
             </p>
-            <div className="flex items-center justify-center gap-4">
+            <HeroUrlInput />
+            <div className="flex items-center justify-center gap-4 mt-2">
               <Link
-                href="/signup"
-                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors text-sm"
+                href="/features/deliberation"
+                className="text-sm text-zinc-500 hover:text-indigo-400 transition-colors group"
               >
-                Get Started Free
-              </Link>
-              <Link
-                href="/developers"
-                className="px-6 py-3 border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-white rounded-lg transition-colors text-sm"
-              >
-                View API Docs
+                Or see AI deliberation in action
+                <span className="inline-block ml-1 group-hover:translate-x-1 transition-transform">&rarr;</span>
               </Link>
             </div>
           </div>
@@ -110,10 +113,9 @@ export default function LandingPage() {
       <section className="py-24">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-white">Three pillars of intelligent mastering</h2>
+            <h2 className="text-3xl font-bold text-white">Why WhitePrint is different</h2>
             <p className="mt-4 text-zinc-400 max-w-2xl mx-auto">
-              Unlike black-box mastering services, WhitePrint shows you the full decision pipeline
-              from analysis through AI deliberation to final processing.
+              Other AI mastering returns a result. WhitePrint shows you the reason.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
@@ -126,7 +128,11 @@ export default function LandingPage() {
                 <div className="w-12 h-12 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-6 group-hover:bg-indigo-500/20 transition-colors">
                   {feature.icon}
                 </div>
-                <h3 className="text-lg font-semibold text-white mb-3">{feature.title}</h3>
+                <div className="text-xs font-mono text-indigo-400/70 mb-2">{feature.subtitle}</div>
+                <h3 className="text-lg font-bold text-white mb-3 group-hover:text-indigo-300 transition-colors">
+                  {feature.title}
+                  <span className="inline-block ml-2 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all">&rarr;</span>
+                </h3>
                 <p className="text-sm text-zinc-400 leading-relaxed">{feature.description}</p>
               </Link>
             ))}
@@ -138,25 +144,25 @@ export default function LandingPage() {
       <section className="py-24 border-t border-zinc-800/50">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-white">How it works</h2>
-            <p className="mt-4 text-zinc-400">Three steps from raw audio to mastered track.</p>
+            <h2 className="text-3xl font-bold text-white">Paste a URL. Wait. Done.</h2>
+            <p className="mt-4 text-zinc-400">No file upload. No plugins. No sessions.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-12">
             {[
               {
                 step: '01',
-                title: 'Paste a URL',
-                desc: 'No file upload needed. Paste a link from Google Drive, Dropbox, OneDrive, S3, or GCS.',
+                title: 'Paste a cloud URL',
+                desc: 'Google Drive, Dropbox, OneDrive, S3, GCS. Just paste the link — we fetch your audio directly.',
               },
               {
                 step: '02',
-                title: 'AI analyzes & deliberates',
-                desc: 'BS.1770-4 analysis runs first, then three LLMs independently recommend mastering parameters.',
+                title: 'AIs analyze, deliberate, decide',
+                desc: 'BS.1770-4 physical analysis runs first. Then three AIs independently deliberate and vote on section-by-section parameters.',
               },
               {
                 step: '03',
                 title: 'Download your master',
-                desc: 'The DSP chain applies consensus parameters. Download your mastered WAV with full metrics.',
+                desc: 'Consensus-driven DSP processing completes. WAV download with before/after metrics and full deliberation logs.',
               },
             ].map((item) => (
               <div key={item.step} className="text-center">
@@ -171,25 +177,90 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Differentiator */}
+      <section className="py-24 border-t border-zinc-800/50">
+        <div className="max-w-4xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold text-white">
+              &ldquo;Sounds good&rdquo; isn&apos;t good enough.
+            </h2>
+            <p className="mt-4 text-zinc-400">
+              Every parameter has a reason. Every decision has evidence.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-6">
+            {[
+              {
+                label: 'Other AI Mastering',
+                items: [
+                  'Audio in, result out. Black box.',
+                  'No explanation of what changed or why',
+                  'No parameter control',
+                  'Same processing for the entire track',
+                ],
+                bad: true,
+              },
+              {
+                label: 'WhitePrint',
+                items: [
+                  '3 AIs independently recommend parameters with rationale',
+                  'Full deliberation logs — see where they agree and disagree',
+                  'Override any DSP parameter manually',
+                  'Dynamic section-based mastering that follows the music',
+                ],
+                bad: false,
+              },
+            ].map((col) => (
+              <div
+                key={col.label}
+                className={`p-8 rounded-xl border ${
+                  col.bad
+                    ? 'border-zinc-800 bg-zinc-950'
+                    : 'border-indigo-500/50 bg-indigo-500/5'
+                }`}
+              >
+                <h3 className={`text-sm font-bold uppercase tracking-wider mb-6 ${
+                  col.bad ? 'text-zinc-500' : 'text-indigo-400'
+                }`}>
+                  {col.label}
+                </h3>
+                <ul className="space-y-3">
+                  {col.items.map((item) => (
+                    <li key={item} className="flex items-start gap-3 text-sm">
+                      {col.bad ? (
+                        <span className="text-zinc-600 mt-0.5">&#x2715;</span>
+                      ) : (
+                        <span className="text-indigo-400 mt-0.5">&#x2713;</span>
+                      )}
+                      <span className={col.bad ? 'text-zinc-500' : 'text-zinc-300'}>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="py-24">
         <div className="max-w-3xl mx-auto px-6 text-center space-y-8">
           <h2 className="text-3xl font-bold text-white">
-            Ready to master with full transparency?
+            Try it on your own track.
           </h2>
           <p className="text-zinc-400">
-            Start for free. No credit card required. See exactly how AI masters your audio.
+            Free. No signup. No credit card. Just listen.
           </p>
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex items-center justify-center gap-4 flex-wrap">
             <Link
-              href="/signup"
-              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors"
+              href="/app"
+              className="px-8 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-colors"
             >
-              Start Free
+              Master Now
             </Link>
             <Link
               href="/pricing"
-              className="px-8 py-3 border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-white rounded-lg transition-colors"
+              className="px-8 py-3.5 border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-white rounded-lg transition-colors"
             >
               View Pricing
             </Link>

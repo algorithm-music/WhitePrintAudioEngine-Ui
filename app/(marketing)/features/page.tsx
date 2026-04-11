@@ -77,10 +77,10 @@ export default function FeaturesPage() {
           WhitePrint fetches and processes your audio directly from the cloud.
         </p>
         <Link
-          href="/signup"
+          href="/app"
           className="inline-flex px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors text-sm"
         >
-          Try It Free
+          Try It Now — No Signup
         </Link>
       </div>
     </div>

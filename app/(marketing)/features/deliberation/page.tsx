@@ -83,10 +83,10 @@ export default function DeliberationFeaturePage() {
 
       <div className="mt-16 text-center">
         <Link
-          href="/signup"
+          href="/app"
           className="inline-flex px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors text-sm"
         >
-          Try Deliberation Free
+          Try Deliberation Now
         </Link>
       </div>
     </div>

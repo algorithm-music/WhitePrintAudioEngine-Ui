@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import UploadScreen from '@/components/upload-screen';
 import AnalyzingScreen from '@/components/analyzing-screen';
@@ -17,13 +18,15 @@ import type { AnalysisResult } from '@/types/audio';
 import type { DeliberationOutput } from '@/types/deliberation';
 import type { MasteringResult } from '@/types/mastering';
 
-export default function AppDashboard() {
+function AppDashboardInner() {
+  const searchParams = useSearchParams();
   const [appState, setAppState] = useState<'idle' | 'analyzing' | 'results' | 'deliberating' | 'deliberation_results' | 'mastering' | 'mastering_results'>('idle');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [deliberationResult, setDeliberationResult] = useState<DeliberationOutput | null>(null);
   const [masteringResult, setMasteringResult] = useState<MasteringResult | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const autoStarted = useRef(false);
 
   const handleSubmit = async (url: string) => {
     setAppState('analyzing');
@@ -39,6 +42,16 @@ export default function AppDashboard() {
       setAppState('idle');
     }
   };
+
+  // Auto-start analysis if URL is passed via query param (from LP hero)
+  useEffect(() => {
+    const urlParam = searchParams.get('url');
+    if (urlParam && !autoStarted.current && appState === 'idle') {
+      autoStarted.current = true;
+      handleSubmit(urlParam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const handleReset = () => {
     setAppState('idle');
@@ -184,5 +197,17 @@ export default function AppDashboard() {
         </AnimatePresence>
       </div>
     </main>
+  );
+}
+
+export default function AppDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="w-6 h-6 rounded bg-indigo-500 animate-pulse" />
+      </div>
+    }>
+      <AppDashboardInner />
+    </Suspense>
   );
 }
