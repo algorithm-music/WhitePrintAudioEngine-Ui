@@ -145,7 +145,7 @@ export default function UploadScreen({ onSubmit, error }: UploadScreenProps) {
           <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
           <div>
             <h4 className="text-sm font-mono font-semibold text-red-400">ANALYSIS_FAILED</h4>
-            <p className="text-xs font-mono text-red-300/80 mt-1">{displayError}</p>
+            <div className="text-xs font-mono text-red-300/80 mt-1 whitespace-pre-line">{displayError}</div>
           </div>
         </motion.div>
       )}

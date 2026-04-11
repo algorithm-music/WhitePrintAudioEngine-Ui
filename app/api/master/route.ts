@@ -112,8 +112,10 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
 
     if (!response.ok) {
+      const raw = data.detail || data.error || `Backend error: ${response.status}`;
+      const friendly = humanizeError(raw, response.status);
       return NextResponse.json(
-        { error: data.detail || `Backend error: ${response.status}` },
+        { error: friendly, detail: raw },
         { status: response.status }
       );
     }
@@ -131,6 +133,41 @@ export async function POST(request: NextRequest) {
       { status: 502 }
     );
   }
+}
+
+function humanizeError(raw: string, status: number): string {
+  const lower = raw.toLowerCase();
+
+  // Google Drive auth redirect → file not shared
+  if (lower.includes('accounts.google.com') || lower.includes('servicelogin') || lower.includes('interactivelogin')) {
+    return 'Cannot access this file. Please set Google Drive sharing to "Anyone with the link can view".';
+  }
+  // File too small / not audio
+  if (lower.includes('too small') || lower.includes('not valid audio')) {
+    return 'The downloaded file is too small or not a valid audio file. Please check the URL points to a WAV, FLAC, or AIFF file.';
+  }
+  // 404 from storage provider
+  if (lower.includes('404') || lower.includes('not found')) {
+    return 'File not found. The URL may be incorrect or the file has been deleted.';
+  }
+  // Timeout
+  if (lower.includes('timeout') || lower.includes('timed out')) {
+    return 'The file download timed out. Try a smaller file or a faster storage provider.';
+  }
+  // Rendition-DSP 503 (OOM / cold start)
+  if (status === 502 && (lower.includes('503') || lower.includes('service unavailable'))) {
+    return 'The mastering engine is temporarily unavailable. Please try again in 30 seconds.';
+  }
+  // Downstream 422 — usually file access or format issue
+  if (status === 422 || (lower.includes('downstream') && lower.includes('422'))) {
+    return 'Could not process the audio file. Common causes:\n• Google Drive file not shared publicly ("Anyone with the link")\n• URL does not point directly to an audio file (WAV/FLAC/AIFF)\n• File is too small or corrupted';
+  }
+  // Generic downstream
+  if (lower.includes('downstream')) {
+    return `Processing failed (${status}). Please check your audio URL and try again.`;
+  }
+
+  return raw;
 }
 
 async function incrementUsage(request: NextRequest) {
