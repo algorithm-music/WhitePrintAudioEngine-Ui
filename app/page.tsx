@@ -9,6 +9,7 @@ import DeliberatingScreen from '@/components/deliberating-screen';
 import DeliberationDashboard from '@/components/deliberation-dashboard';
 import MasteringScreen from '@/components/mastering-screen';
 import MasteringDashboard from '@/components/mastering-dashboard';
+import SiteHeader from '@/components/site-header';
 import { analyzeAudio } from '@/lib/audio-analysis';
 import { runDeliberation } from '@/lib/deliberation';
 import { runMastering } from '@/lib/mastering';
@@ -81,35 +82,16 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-zinc-100 font-sans selection:bg-indigo-500/30 overflow-hidden flex flex-col">
       {/* Header */}
-      <header className="border-b border-zinc-800/50 bg-zinc-950/50 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded bg-indigo-500 flex items-center justify-center">
-                <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-              </div>
-              <h1 className="font-mono text-sm font-semibold tracking-wider text-zinc-200">
-                RENDITION_DSP <span className="text-zinc-500 font-normal">v2.0.0</span>
-              </h1>
-            </div>
-            <nav className="hidden md:flex items-center gap-4 text-xs font-mono">
-              <a href="/" className="text-zinc-400 hover:text-white transition-colors">DASHBOARD</a>
-              <a href="/api-keys" className="text-zinc-400 hover:text-white transition-colors">API_KEYS</a>
-              <a href="/api-docs" className="text-zinc-400 hover:text-white transition-colors">CURL_GEN</a>
-            </nav>
-          </div>
-          <div className="flex items-center gap-4">
-            {(appState === 'results' || appState === 'deliberation_results' || appState === 'mastering_results') && (
-              <button
-                onClick={handleReset}
-                className="text-xs font-mono text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded border border-zinc-800 hover:border-zinc-600"
-              >
-                [ NEW_SESSION ]
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
+      <SiteHeader>
+        {(appState === 'results' || appState === 'deliberation_results' || appState === 'mastering_results') && (
+          <button
+            onClick={handleReset}
+            className="text-xs font-mono text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded border border-zinc-800 hover:border-zinc-600"
+          >
+            [ NEW_SESSION ]
+          </button>
+        )}
+      </SiteHeader>
 
       {/* Main Content Area */}
       <div className="flex-1 relative">

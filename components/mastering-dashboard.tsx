@@ -2,7 +2,7 @@
 
 import type { MasteringResult } from '@/types/mastering';
 import { motion } from 'framer-motion';
-import { Download, Zap, CheckCircle2, Activity, Volume2, Maximize, Youtube } from 'lucide-react';
+import { Download, Zap, CheckCircle2, Activity, Volume2, Maximize } from 'lucide-react';
 import ABPlayer from './ab-player';
 
 interface MasteringDashboardProps {
@@ -21,13 +21,6 @@ export default function MasteringDashboard({ data, audioUrl }: MasteringDashboar
           MASTERING_COMPLETE
         </h2>
         <div className="flex items-center gap-4">
-          <button
-            className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-bold transition-colors shadow-[0_0_20px_rgba(220,38,38,0.2)]"
-            onClick={() => alert('Exporting to YouTube...')}
-          >
-            <Youtube className="w-4 h-4" />
-            EXPORT TO YOUTUBE
-          </button>
           <a
             href={data.download_url}
             download
@@ -82,7 +75,7 @@ export default function MasteringDashboard({ data, audioUrl }: MasteringDashboar
         </div>
 
         {/* High-Fidelity A/B Player */}
-        <ABPlayer audioUrl={audioUrl} gainAdjustmentDb={metrics.gain_adjustment_db} />
+        <ABPlayer audioUrl={audioUrl} masteredUrl={data.download_url} />
       </motion.div>
     </div>
   );

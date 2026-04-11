@@ -118,7 +118,7 @@ export default function DeliberationDashboard({ data, onRunMastering }: Delibera
                     </div>
                   </div>
                   <p className="text-xs text-zinc-300 leading-relaxed mb-3">
-                    "{opinion.rationale}"
+                    &ldquo;{opinion.rationale}&rdquo;
                   </p>
                   <div className="space-y-2">
                     <div className="text-xs font-mono text-zinc-500">Proposed Params:</div>

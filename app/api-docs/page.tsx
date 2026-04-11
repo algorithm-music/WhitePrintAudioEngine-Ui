@@ -1,21 +1,34 @@
 'use client';
 
 import { useState } from 'react';
-import { Terminal, Copy, CheckCircle2, Play } from 'lucide-react';
+import { Terminal, Copy, CheckCircle2 } from 'lucide-react';
+import SiteHeader from '@/components/site-header';
+
+const ROUTE_OPTIONS = [
+  { value: 'full', label: 'full — Analyze + Deliberation + Mastering' },
+  { value: 'analyze_only', label: 'analyze_only — Audio Analysis Only' },
+  { value: 'deliberation_only', label: 'deliberation_only — Analysis + AI Deliberation' },
+  { value: 'dsp_only', label: 'dsp_only — DSP Mastering (manual_params required)' },
+];
 
 export default function CurlGenPage() {
   const [copied, setCopied] = useState(false);
+  const [baseUrl, setBaseUrl] = useState('https://your-concertmaster-url.a.run.app');
+  const [apiKey, setApiKey] = useState('your-api-key-here');
+  const [audioUrl, setAudioUrl] = useState('https://www.dropbox.com/s/example/track.wav?dl=1');
+  const [route, setRoute] = useState('full');
   const [targetLufs, setTargetLufs] = useState('-14.0');
   const [targetTruePeak, setTargetTruePeak] = useState('-1.0');
-  const [apiKey, setApiKey] = useState('sk_live_your_api_key_here');
 
-  const curlCommand = `curl -X POST https://api.rendition.dev/v2/master \\
-  -H "Authorization: Bearer ${apiKey}" \\
-  -H "Content-Type: multipart/form-data" \\
-  -F "file=@/path/to/your/mix.wav" \\
-  -F "target_lufs=${targetLufs}" \\
-  -F "target_true_peak=${targetTruePeak}" \\
-  -F "engine=v2_14stage"`;
+  const curlCommand = `curl -X POST ${baseUrl}/api/v1/jobs/master \\
+  -H "X-Api-Key: ${apiKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "audio_url": "${audioUrl}",
+    "route": "${route}",
+    "target_lufs": ${targetLufs},
+    "target_true_peak": ${targetTruePeak}
+  }'`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(curlCommand);
@@ -24,6 +37,8 @@ export default function CurlGenPage() {
   };
 
   return (
+    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 font-sans">
+    <SiteHeader />
     <div className="max-w-5xl mx-auto p-6 space-y-8">
       <div className="flex justify-between items-center">
         <div>
@@ -31,7 +46,7 @@ export default function CurlGenPage() {
             <Terminal className="w-6 h-6 text-emerald-400" />
             CURL_GENERATOR
           </h1>
-          <p className="text-sm text-zinc-400 font-mono mt-1">Generate cURL commands to interact with the Mastering API.</p>
+          <p className="text-sm text-zinc-400 font-mono mt-1">Generate cURL commands for the WhitePrint Mastering API.</p>
         </div>
       </div>
 
@@ -42,14 +57,49 @@ export default function CurlGenPage() {
           
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-mono text-zinc-500 mb-2">API Key</label>
+              <label className="block text-xs font-mono text-zinc-500 mb-2">API Base URL</label>
+              <input 
+                type="text" 
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-300 font-mono focus:outline-none focus:border-indigo-500 transition-colors"
+                placeholder="https://..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono text-zinc-500 mb-2">X-Api-Key</label>
               <input 
                 type="text" 
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-300 font-mono focus:outline-none focus:border-indigo-500 transition-colors"
-                placeholder="sk_live_..."
+                placeholder="your-api-key"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono text-zinc-500 mb-2">Audio URL</label>
+              <input 
+                type="text" 
+                value={audioUrl}
+                onChange={(e) => setAudioUrl(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-300 font-mono focus:outline-none focus:border-indigo-500 transition-colors"
+                placeholder="https://dropbox.com/..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono text-zinc-500 mb-2">Route</label>
+              <select
+                value={route}
+                onChange={(e) => setRoute(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-300 font-mono focus:outline-none focus:border-indigo-500 transition-colors"
+              >
+                {ROUTE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
             </div>
             
             <div>
@@ -99,14 +149,15 @@ export default function CurlGenPage() {
             </pre>
           </div>
 
-          <div className="mt-auto p-4 bg-zinc-900/30 border-t border-zinc-800 flex justify-end">
-            <button className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm font-bold transition-colors">
-              <Play className="w-4 h-4" />
-              TEST REQUEST (MOCK)
-            </button>
+          <div className="mt-auto p-4 bg-zinc-900/30 border-t border-zinc-800">
+            <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg text-xs font-mono text-indigo-300">
+              <strong>Note:</strong> The <code>full</code> and <code>dsp_only</code> routes return <code>audio/wav</code> binary. Add <code>-o master.wav</code> to save the output file.
+              The <code>analyze_only</code> and <code>deliberation_only</code> routes return JSON.
+            </div>
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }

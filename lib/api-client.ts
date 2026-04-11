@@ -8,11 +8,24 @@ export class ApiError extends Error {
 }
 
 export async function postMaster<T>(body: Record<string, unknown>): Promise<T> {
-  const res = await fetch('/api/master', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 300_000);
+  let res: Response;
+  try {
+    res = await fetch('/api/master', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new ApiError('Request timed out after 5 minutes. The backend may be overloaded.', 408);
+    }
+    throw err;
+  }
+  clearTimeout(timeout);
 
   if (!res.ok) {
     let message = `Backend error (${res.status})`;
@@ -33,11 +46,24 @@ export async function postMasterBinary(body: Record<string, unknown>): Promise<{
   blob: Blob;
   headers: Record<string, string>;
 }> {
-  const res = await fetch('/api/master', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 300_000);
+  let res: Response;
+  try {
+    res = await fetch('/api/master', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new ApiError('Request timed out after 5 minutes. The backend may be overloaded.', 408);
+    }
+    throw err;
+  }
+  clearTimeout(timeout);
 
   if (!res.ok) {
     let message = `Backend error (${res.status})`;
