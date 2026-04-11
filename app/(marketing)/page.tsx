@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { WebApplicationJsonLd, OrganizationJsonLd } from '@/components/seo/json-ld';
+import HeroUrlInput from '@/components/marketing/hero-url-input';
 
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
@@ -80,18 +81,13 @@ export default function LandingPage() {
               <br />
               Black-box mastering is over.
             </p>
-            <div className="flex items-center justify-center gap-4 flex-wrap">
-              <Link
-                href="/app"
-                className="px-8 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition-colors text-base"
-              >
-                Master Now — Free, no signup
-              </Link>
+            <HeroUrlInput />
+            <div className="flex items-center justify-center gap-4 mt-2">
               <Link
                 href="/features/deliberation"
-                className="px-6 py-3.5 border border-zinc-700 hover:border-indigo-500/50 text-zinc-300 hover:text-white rounded-lg transition-colors text-sm group"
+                className="text-sm text-zinc-500 hover:text-indigo-400 transition-colors group"
               >
-                See AI deliberation in action
+                Or see AI deliberation in action
                 <span className="inline-block ml-1 group-hover:translate-x-1 transition-transform">&rarr;</span>
               </Link>
             </div>
