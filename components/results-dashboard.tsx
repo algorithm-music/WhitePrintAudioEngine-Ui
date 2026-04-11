@@ -87,16 +87,21 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
             </div>
 
             {/* Loudness & Dynamics */}
-            <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5 flex flex-col lg:col-span-2">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5 lg:col-span-2">
               <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                 <Volume2 className="w-4 h-4" /> BS.1770-4_Metrics
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-auto">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <MetricBox label="INT_LUFS" value={whole_track_metrics.integrated_lufs} unit="LUFS" highlight={whole_track_metrics.integrated_lufs > -10 ? 'warn' : 'normal'} />
                 <MetricBox label="TRUE_PEAK" value={whole_track_metrics.true_peak_dbtp} unit="dBTP" highlight={whole_track_metrics.true_peak_dbtp > -0.3 ? 'danger' : 'normal'} />
                 <MetricBox label="LRA" value={whole_track_metrics.lra_lu} unit="LU" />
                 <MetricBox label="CREST" value={whole_track_metrics.crest_db} unit="dB" highlight={whole_track_metrics.crest_db < 6 ? 'warn' : 'normal'} />
                 <MetricBox label="WIDTH" value={whole_track_metrics.stereo_width.toFixed(2)} />
+                <MetricBox label="CORRELATION" value={whole_track_metrics.stereo_correlation.toFixed(3)} />
+                <MetricBox label="HARSHNESS" value={whole_track_metrics.harshness_risk.toFixed(2)} highlight={whole_track_metrics.harshness_risk > 0.5 ? 'warn' : 'normal'} />
+                <MetricBox label="MUD_RISK" value={whole_track_metrics.mud_risk.toFixed(2)} highlight={whole_track_metrics.mud_risk > 0.5 ? 'warn' : 'normal'} />
+                <MetricBox label="LOW_MONO" value={whole_track_metrics.low_mono_correlation_below_120hz.toFixed(3)} />
+                <MetricBox label="PSR" value={whole_track_metrics.psr_db} unit="dB" />
               </div>
             </div>
           </div>
@@ -257,6 +262,16 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
                   const brightness = avg(time_series_circuit_envelopes.spectral_brightness);
                   const transient = avg(time_series_circuit_envelopes.transient_sharpness);
                   const duration = sec.end_sec - sec.start_sec;
+                  const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+                  // Infer section character from metrics
+                  const sectionHint =
+                    sec.avg_lufs < -20 ? 'Fade / Silence' :
+                    sec.avg_lufs > -13 ? 'Peak Energy' :
+                    crest > 10 ? 'Dynamic / Sparse' :
+                    sub > 0.4 ? 'Bass-Heavy' :
+                    brightness > 0.02 ? 'Bright / Airy' :
+                    sec.avg_width > 0.15 ? 'Wide Stereo' :
+                    'Steady';
 
                   return (
                     <div key={idx} className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-lg">
@@ -266,10 +281,13 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
                             SEC_{idx}
                           </span>
                           <span className="text-xs font-mono text-zinc-500">
-                            {sec.start_sec.toFixed(1)}s — {sec.end_sec.toFixed(1)}s
+                            {fmtTime(sec.start_sec)} — {fmtTime(sec.end_sec)}
                           </span>
                           <span className="text-[10px] font-mono text-zinc-600">
                             ({duration.toFixed(0)}s)
+                          </span>
+                          <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
+                            {sectionHint}
                           </span>
                         </div>
                       </div>
