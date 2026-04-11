@@ -263,15 +263,6 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
                   const transient = avg(time_series_circuit_envelopes.transient_sharpness);
                   const duration = sec.end_sec - sec.start_sec;
                   const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
-                  // Infer section character from metrics
-                  const sectionHint =
-                    sec.avg_lufs < -20 ? 'Fade / Silence' :
-                    sec.avg_lufs > -13 ? 'Peak Energy' :
-                    crest > 10 ? 'Dynamic / Sparse' :
-                    sub > 0.4 ? 'Bass-Heavy' :
-                    brightness > 0.02 ? 'Bright / Airy' :
-                    sec.avg_width > 0.15 ? 'Wide Stereo' :
-                    'Steady';
 
                   return (
                     <div key={idx} className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-lg">
@@ -285,9 +276,6 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
                           </span>
                           <span className="text-[10px] font-mono text-zinc-600">
                             ({duration.toFixed(0)}s)
-                          </span>
-                          <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
-                            {sectionHint}
                           </span>
                         </div>
                       </div>

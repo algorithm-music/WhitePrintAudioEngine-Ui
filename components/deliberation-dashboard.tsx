@@ -126,54 +126,103 @@ export default function DeliberationDashboard({ data, onRunMastering }: Delibera
               <Layers className="w-4 h-4" /> Dynamic_Mastering_Sections
             </h3>
             <div className="space-y-4">
-              {(data.dynamic_mastering_sections ?? []).map((section, index) => (
-                <div key={index} className="bg-zinc-950 border border-zinc-800 rounded-xl p-5">
-                  <div className="flex justify-between items-center mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="px-2 py-1 bg-zinc-800 rounded text-xs font-mono text-zinc-300">
-                        {section.start_sec.toFixed(1)}s - {section.end_sec.toFixed(1)}s
+              {(data.dynamic_mastering_sections ?? []).map((section, index) => {
+                const m = section.source_metrics;
+                const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+                const hasOverrides = Object.keys(section.override_sources).length > 0;
+                const hasDiff = Object.keys(section.diff_from_global).length > 0;
+                const hasCoupling = (section.dsp_coupling_applied ?? []).length > 0;
+
+                return (
+                  <div key={index} className="bg-zinc-950 border border-zinc-800 rounded-xl p-5 space-y-4">
+                    {/* Header */}
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <div className="px-2 py-1 bg-zinc-800 rounded text-xs font-mono text-zinc-300">
+                          {fmtTime(section.start_sec)} — {fmtTime(section.end_sec)}
+                        </div>
+                        <span className="text-[10px] font-mono text-zinc-600">({section.duration_sec.toFixed(0)}s)</span>
+                        <h4 className="text-sm font-bold text-white">{section.label}</h4>
                       </div>
-                      <h4 className="text-sm font-bold text-white">{section.label}</h4>
+                      <div className="flex gap-2">
+                        {hasOverrides && (
+                          <div className="flex items-center gap-1 text-[10px] font-mono text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded">
+                            <AlertTriangle className="w-3 h-3" /> OVERRIDE
+                          </div>
+                        )}
+                        {hasCoupling && (
+                          <div className="flex items-center gap-1 text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-1 rounded">
+                            DSP_COUPLED
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    {Object.keys(section.override_sources).length > 0 && (
-                      <div className="flex items-center gap-1 text-xs font-mono text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded">
-                        <AlertTriangle className="w-3 h-3" /> OVERRIDE APPLIED
+
+                    {/* Source Metrics — the full picture */}
+                    {m && (
+                      <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                        <MiniMetric label="AVG_LUFS" value={m.avg_lufs?.toFixed(1)} warn={m.avg_lufs > -12} />
+                        <MiniMetric label="PEAK_LUFS" value={m.peak_lufs?.toFixed(1)} />
+                        <MiniMetric label="CREST" value={m.avg_crest_db?.toFixed(1)} unit="dB" />
+                        <MiniMetric label="WIDTH" value={m.avg_stereo_width?.toFixed(3)} />
+                        <MiniMetric label="CENTROID" value={m.avg_spectral_centroid?.toFixed(0)} unit="Hz" />
+                        <MiniMetric label="TRANSIENT" value={m.avg_transient_sharp?.toFixed(3)} />
+                        <MiniMetric label="SUB" value={((m.sub_ratio ?? 0) * 100).toFixed(1)} unit="%" warn={(m.sub_ratio ?? 0) > 0.4} />
+                        <MiniMetric label="BASS" value={((m.bass_ratio ?? 0) * 100).toFixed(1)} unit="%" />
+                        <MiniMetric label="LOW_MID" value={((m.low_mid_ratio ?? 0) * 100).toFixed(1)} unit="%" />
+                        <MiniMetric label="MID" value={((m.mid_ratio ?? 0) * 100).toFixed(1)} unit="%" />
+                        <MiniMetric label="HIGH" value={((m.high_ratio ?? 0) * 100).toFixed(1)} unit="%" />
+                        <MiniMetric label="AIR" value={((m.air_ratio ?? 0) * 100).toFixed(1)} unit="%" />
+                      </div>
+                    )}
+
+                    {/* AI Override Rationales */}
+                    {hasOverrides && (
+                      <div className="space-y-2">
+                        {Object.entries(section.override_sources).map(([agent, info]) => (
+                          <div key={agent} className="text-xs text-zinc-400 bg-zinc-900 p-3 rounded-lg border border-zinc-800/50">
+                            <span className="font-bold text-zinc-300 uppercase">{agent}:</span> {info.rationale}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Parameter Diff from Global */}
+                    {hasDiff && (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {Object.entries(section.diff_from_global).map(([param, diff]) => (
+                          <div key={param} className="bg-zinc-900 p-2 rounded-lg border border-zinc-800/50">
+                            <div className="text-[9px] font-mono text-zinc-500 uppercase truncate">{param}</div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-mono text-zinc-100">{typeof diff.section_value === 'number' ? diff.section_value.toFixed(2) : diff.section_value}</span>
+                              <span className={`text-xs font-mono ${diff.delta > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {diff.delta > 0 ? '+' : ''}{diff.delta.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {!hasDiff && (
+                      <div className="text-xs text-zinc-600 font-mono italic">
+                        Using global parameters (no section-specific overrides).
+                      </div>
+                    )}
+
+                    {/* DSP Coupling Rules */}
+                    {hasCoupling && (
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-mono text-amber-500 uppercase">DSP Coupling Applied</div>
+                        {section.dsp_coupling_applied.map((rule, rIdx) => (
+                          <div key={rIdx} className="text-[10px] font-mono text-zinc-500 bg-zinc-900 p-2 rounded border border-zinc-800/30">
+                            <span className="text-amber-400">[{rule.rule_name}]</span> {rule.reason}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
-                  
-                  {Object.keys(section.override_sources).length > 0 && (
-                    <div className="mb-4 space-y-2">
-                      {Object.entries(section.override_sources).map(([agent, info]) => (
-                        <div key={agent} className="text-xs text-zinc-400 bg-zinc-900 p-3 rounded-lg border border-zinc-800/50">
-                          <span className="font-bold text-zinc-300 uppercase">{agent}:</span> {info.rationale}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {Object.keys(section.diff_from_global).length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {Object.entries(section.diff_from_global).map(([param, diff]) => (
-                        <div key={param} className="bg-zinc-900 p-3 rounded-lg border border-zinc-800/50">
-                          <div className="text-[10px] font-mono text-zinc-500 mb-1 uppercase truncate">{param}</div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-mono text-zinc-100">{diff.section_value}</span>
-                            <span className={`text-xs font-mono ${diff.delta > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                              {diff.delta > 0 ? '+' : ''}{diff.delta.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {Object.keys(section.diff_from_global).length === 0 && (
-                    <div className="text-xs text-zinc-500 font-mono italic">
-                      No parameter overrides for this section. Using global parameters.
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -231,6 +280,17 @@ function SageCard({ opinion, colors }: { opinion: DeliberationOutput['opinions']
           <ParamChip label="STEREO_W" value={opinion.stereo_width} />
           <ParamChip label="TAPE_SAT" value={opinion.tape_saturation} />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MiniMetric({ label, value, unit = '', warn = false }: { label: string; value?: string; unit?: string; warn?: boolean }) {
+  return (
+    <div className={`px-2 py-1.5 rounded text-center border ${warn ? 'border-amber-500/30 bg-amber-500/5' : 'border-zinc-800/50 bg-zinc-900/50'}`}>
+      <div className="text-[8px] font-mono text-zinc-600 uppercase">{label}</div>
+      <div className={`text-[11px] font-mono font-medium ${warn ? 'text-amber-400' : 'text-zinc-300'}`}>
+        {value ?? '—'}{unit && <span className="text-zinc-600 text-[8px] ml-0.5">{unit}</span>}
       </div>
     </div>
   );
