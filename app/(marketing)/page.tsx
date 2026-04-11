@@ -1,0 +1,201 @@
+import Link from 'next/link';
+import type { Metadata } from 'next';
+import { WebApplicationJsonLd, OrganizationJsonLd } from '@/components/seo/json-ld';
+
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+};
+
+const features = [
+  {
+    title: 'BS.1770-4 Analysis',
+    description:
+      'ITU broadcast-standard loudness measurement. LUFS, true peak, LRA, crest factor, spectral analysis, and section detection in one pass.',
+    href: '/features/analysis',
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+      </svg>
+    ),
+  },
+  {
+    title: 'Multi-LLM Deliberation',
+    description:
+      'Three AI models (OpenAI, Anthropic, Google) independently analyze your track and vote on optimal mastering parameters. Full transparency into every decision.',
+    href: '/features/deliberation',
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+      </svg>
+    ),
+  },
+  {
+    title: 'Automated Mastering',
+    description:
+      'Professional DSP chain with 25+ parameters: EQ, compression, limiting, saturation, stereo processing. Applied automatically based on AI consensus.',
+    href: '/features/mastering',
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+      </svg>
+    ),
+  },
+];
+
+const stats = [
+  { value: 'BS.1770-4', label: 'Standard Compliance' },
+  { value: '3 LLMs', label: 'Ensemble Deliberation' },
+  { value: '25+', label: 'DSP Parameters' },
+  { value: 'REST API', label: 'Developer Access' },
+];
+
+export default function LandingPage() {
+  return (
+    <>
+      <WebApplicationJsonLd />
+      <OrganizationJsonLd />
+
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/5 via-transparent to-transparent" />
+        <div className="max-w-7xl mx-auto px-6 pt-24 pb-20 relative">
+          <div className="max-w-3xl mx-auto text-center space-y-8">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-xs text-indigo-300 font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+              AI-Powered Audio Mastering Engine
+            </div>
+            <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-white leading-tight">
+              Master your audio with{' '}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">
+                transparent AI
+              </span>
+            </h1>
+            <p className="text-lg text-zinc-400 max-w-2xl mx-auto leading-relaxed">
+              BS.1770-4 compliant analysis, multi-LLM ensemble deliberation, and automated DSP
+              mastering. See exactly why every parameter was chosen.
+            </p>
+            <div className="flex items-center justify-center gap-4">
+              <Link
+                href="/signup"
+                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors text-sm"
+              >
+                Get Started Free
+              </Link>
+              <Link
+                href="/developers"
+                className="px-6 py-3 border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-white rounded-lg transition-colors text-sm"
+              >
+                View API Docs
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Stats */}
+      <section className="border-y border-zinc-800/50">
+        <div className="max-w-7xl mx-auto px-6 py-12">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {stats.map((stat) => (
+              <div key={stat.label} className="text-center">
+                <div className="text-2xl font-bold text-white font-mono">{stat.value}</div>
+                <div className="text-sm text-zinc-500 mt-1">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="py-24">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold text-white">Three pillars of intelligent mastering</h2>
+            <p className="mt-4 text-zinc-400 max-w-2xl mx-auto">
+              Unlike black-box mastering services, WhitePrint shows you the full decision pipeline
+              from analysis through AI deliberation to final processing.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            {features.map((feature) => (
+              <Link
+                key={feature.title}
+                href={feature.href}
+                className="group p-8 rounded-xl border border-zinc-800 hover:border-indigo-500/50 bg-zinc-950 transition-all hover:bg-zinc-900/50"
+              >
+                <div className="w-12 h-12 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-6 group-hover:bg-indigo-500/20 transition-colors">
+                  {feature.icon}
+                </div>
+                <h3 className="text-lg font-semibold text-white mb-3">{feature.title}</h3>
+                <p className="text-sm text-zinc-400 leading-relaxed">{feature.description}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="py-24 border-t border-zinc-800/50">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold text-white">How it works</h2>
+            <p className="mt-4 text-zinc-400">Three steps from raw audio to mastered track.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-12">
+            {[
+              {
+                step: '01',
+                title: 'Paste a URL',
+                desc: 'No file upload needed. Paste a link from Google Drive, Dropbox, OneDrive, S3, or GCS.',
+              },
+              {
+                step: '02',
+                title: 'AI analyzes & deliberates',
+                desc: 'BS.1770-4 analysis runs first, then three LLMs independently recommend mastering parameters.',
+              },
+              {
+                step: '03',
+                title: 'Download your master',
+                desc: 'The DSP chain applies consensus parameters. Download your mastered WAV with full metrics.',
+              },
+            ].map((item) => (
+              <div key={item.step} className="text-center">
+                <div className="text-4xl font-mono font-bold text-indigo-500/30 mb-4">
+                  {item.step}
+                </div>
+                <h3 className="text-lg font-semibold text-white mb-2">{item.title}</h3>
+                <p className="text-sm text-zinc-400">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="py-24">
+        <div className="max-w-3xl mx-auto px-6 text-center space-y-8">
+          <h2 className="text-3xl font-bold text-white">
+            Ready to master with full transparency?
+          </h2>
+          <p className="text-zinc-400">
+            Start for free. No credit card required. See exactly how AI masters your audio.
+          </p>
+          <div className="flex items-center justify-center gap-4">
+            <Link
+              href="/signup"
+              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors"
+            >
+              Start Free
+            </Link>
+            <Link
+              href="/pricing"
+              className="px-8 py-3 border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-white rounded-lg transition-colors"
+            >
+              View Pricing
+            </Link>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
