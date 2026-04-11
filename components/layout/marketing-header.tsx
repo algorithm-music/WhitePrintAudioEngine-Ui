@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import UserMenu from '@/components/user-menu';
 
 const navItems = [
   { href: '/features', label: 'Features' },
@@ -41,20 +42,7 @@ export default function MarketingHeader() {
             ))}
           </nav>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/login"
-            className="text-sm text-zinc-400 hover:text-white transition-colors px-3 py-1.5"
-          >
-            Log in
-          </Link>
-          <Link
-            href="/app"
-            className="text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors px-4 py-2 rounded-lg"
-          >
-            Try Now
-          </Link>
-        </div>
+        <UserMenu />
       </div>
     </header>
   );

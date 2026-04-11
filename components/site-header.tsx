@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import UserMenu from '@/components/user-menu';
 
 interface SiteHeaderProps {
   children?: React.ReactNode;
@@ -14,7 +15,6 @@ export default function SiteHeader({ children }: SiteHeaderProps) {
     { href: '/app', label: 'DASHBOARD' },
     { href: '/app/history', label: 'HISTORY' },
     { href: '/developers/docs', label: 'API_DOCS' },
-    { href: '/app/settings', label: 'SETTINGS' },
   ];
 
   return (
@@ -47,6 +47,7 @@ export default function SiteHeader({ children }: SiteHeaderProps) {
         </div>
         <div className="flex items-center gap-4">
           {children}
+          <UserMenu />
         </div>
       </div>
     </header>
