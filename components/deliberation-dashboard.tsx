@@ -106,33 +106,17 @@ export default function DeliberationDashboard({ data, onRunMastering }: Delibera
               <MessageSquare className="w-4 h-4" /> Sage_Opinions
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {data.opinions.map((opinion, index) => (
-                <div key={index} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center">
-                      <BrainCircuit className="w-4 h-4 text-zinc-400" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-bold text-white uppercase">{opinion.agent_name}</div>
-                      <div className="text-xs text-zinc-500">{opinion.provider} - {opinion.model}</div>
-                    </div>
-                  </div>
-                  <p className="text-xs text-zinc-300 leading-relaxed mb-3">
-                    &ldquo;{opinion.rationale}&rdquo;
-                  </p>
-                  <div className="space-y-2">
-                    <div className="text-xs font-mono text-zinc-500">Proposed Params:</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-zinc-950 p-2 rounded text-xs font-mono text-zinc-400">
-                        COMP_TH: {opinion.comp_threshold_db}
-                      </div>
-                      <div className="bg-zinc-950 p-2 rounded text-xs font-mono text-zinc-400">
-                        COMP_RATIO: {opinion.comp_ratio}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              {data.opinions.map((opinion, index) => {
+                const colors = [
+                  { border: 'border-blue-800/50', accent: 'text-blue-400', bg: 'bg-blue-600' },
+                  { border: 'border-emerald-800/50', accent: 'text-emerald-400', bg: 'bg-emerald-600' },
+                  { border: 'border-amber-800/50', accent: 'text-amber-400', bg: 'bg-amber-600' },
+                ][index] ?? { border: 'border-zinc-800', accent: 'text-zinc-400', bg: 'bg-zinc-600' };
+
+                return (
+                  <SageCard key={index} opinion={opinion} colors={colors} />
+                );
+              })}
             </div>
           </div>
 
@@ -195,6 +179,68 @@ export default function DeliberationDashboard({ data, onRunMastering }: Delibera
 
         </motion.div>
       )}
+    </div>
+  );
+}
+
+function SageCard({ opinion, colors }: { opinion: DeliberationOutput['opinions'][number]; colors: { border: string; accent: string; bg: string } }) {
+  const [expanded, setExpanded] = useState(false);
+  const rationale = opinion.rationale || '';
+  const isLong = rationale.length > 150;
+
+  return (
+    <div className={`bg-zinc-900 border ${colors.border} rounded-lg p-4 flex flex-col`}>
+      <div className="flex items-center gap-2 mb-3">
+        <div className={`w-8 h-8 rounded-full ${colors.bg} flex items-center justify-center`}>
+          <span className="text-xs font-bold text-white">
+            {(opinion.agent_name || '?').charAt(0).toUpperCase()}
+          </span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className={`text-sm font-bold uppercase ${colors.accent}`}>{opinion.agent_name}</div>
+          <div className="text-xs text-zinc-500">{opinion.provider} - {opinion.model}</div>
+        </div>
+        {opinion.is_fallback && (
+          <span className="text-[9px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded font-mono">FALLBACK</span>
+        )}
+      </div>
+
+      {/* Rationale — truncated with expand */}
+      <div className="mb-3">
+        <p className={`text-xs text-zinc-300 leading-relaxed ${!expanded && isLong ? 'line-clamp-3' : ''}`}>
+          &ldquo;{rationale}&rdquo;
+        </p>
+        {isLong && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className={`text-[10px] mt-1 ${colors.accent} hover:underline`}
+          >
+            {expanded ? '▲ collapse' : '▼ read more'}
+          </button>
+        )}
+      </div>
+
+      {/* Key Params — 6 metrics */}
+      <div className="mt-auto space-y-1.5">
+        <div className="text-[10px] font-mono text-zinc-500 uppercase">Proposed Params</div>
+        <div className="grid grid-cols-2 gap-1.5">
+          <ParamChip label="COMP_TH" value={opinion.comp_threshold_db} />
+          <ParamChip label="COMP_RATIO" value={opinion.comp_ratio} />
+          <ParamChip label="EQ_LOW" value={opinion.eq_low_shelf_gain_db} />
+          <ParamChip label="EQ_HIGH" value={opinion.eq_high_shelf_gain_db} />
+          <ParamChip label="STEREO_W" value={opinion.stereo_width} />
+          <ParamChip label="TAPE_SAT" value={opinion.tape_saturation} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ParamChip({ label, value }: { label: string; value?: number }) {
+  return (
+    <div className="bg-zinc-950 px-2 py-1.5 rounded text-xs font-mono text-zinc-400 flex justify-between">
+      <span className="text-zinc-600">{label}</span>
+      <span>{value != null ? (typeof value === 'number' ? value.toFixed(1) : value) : '—'}</span>
     </div>
   );
 }

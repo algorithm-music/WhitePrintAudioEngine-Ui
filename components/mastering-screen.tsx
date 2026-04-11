@@ -23,6 +23,7 @@ const DSP_STAGES = [
 export default function MasteringScreen() {
   const [currentStage, setCurrentStage] = useState(0);
   const [loop, setLoop] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -37,6 +38,11 @@ export default function MasteringScreen() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const timer = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const progress = ((currentStage + 1) / DSP_STAGES.length) * 100;
 
   return (
@@ -46,9 +52,18 @@ export default function MasteringScreen() {
         <h2 className="text-xl font-mono font-bold tracking-tight text-white">
           RENDITION_DSP v2
         </h2>
-        <p className="text-xs text-zinc-500 font-mono">
-          14-STAGE MASTERING CHAIN • {loop > 0 ? `CONVERGENCE LOOP ${loop}` : 'INITIAL PASS'}
-        </p>
+        <div className="flex items-center justify-center gap-3 text-xs text-zinc-500 font-mono">
+          <span>14-STAGE CHAIN</span>
+          <span>•</span>
+          <span>{loop > 0 ? `CONVERGENCE LOOP ${loop}` : 'INITIAL PASS'}</span>
+          <span>•</span>
+          <span className="text-zinc-400 tabular-nums">{Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}</span>
+        </div>
+        {elapsed > 60 && (
+          <p className="text-[10px] text-zinc-600 font-mono mt-1">
+            Processing audio with self-correction — this may take 2-5 minutes
+          </p>
+        )}
       </div>
 
       {/* Signal Chain Visualization */}
