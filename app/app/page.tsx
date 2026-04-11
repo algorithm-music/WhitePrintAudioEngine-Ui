@@ -17,7 +17,7 @@ import type { AnalysisResult } from '@/types/audio';
 import type { DeliberationOutput } from '@/types/deliberation';
 import type { MasteringResult } from '@/types/mastering';
 
-export default function Home() {
+export default function AppDashboard() {
   const [appState, setAppState] = useState<'idle' | 'analyzing' | 'results' | 'deliberating' | 'deliberation_results' | 'mastering' | 'mastering_results'>('idle');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [deliberationResult, setDeliberationResult] = useState<DeliberationOutput | null>(null);
@@ -81,7 +81,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-zinc-100 font-sans selection:bg-indigo-500/30 overflow-hidden flex flex-col">
-      {/* Header */}
       <SiteHeader>
         {(appState === 'results' || appState === 'deliberation_results' || appState === 'mastering_results') && (
           <button
@@ -93,7 +92,6 @@ export default function Home() {
         )}
       </SiteHeader>
 
-      {/* Main Content Area */}
       <div className="flex-1 relative">
         <AnimatePresence mode="wait">
           {appState === 'idle' && (

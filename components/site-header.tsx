@@ -11,15 +11,15 @@ export default function SiteHeader({ children }: SiteHeaderProps) {
   const pathname = usePathname();
 
   const navItems = [
-    { href: '/', label: 'DASHBOARD' },
-    { href: '/api-docs', label: 'CURL_GEN' },
+    { href: '/app', label: 'DASHBOARD' },
+    { href: '/developers/docs', label: 'API_DOCS' },
   ];
 
   return (
     <header className="border-b border-zinc-800/50 bg-zinc-950/50 backdrop-blur-md sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-3">
+          <Link href="/app" className="flex items-center gap-3">
             <div className="w-6 h-6 rounded bg-indigo-500 flex items-center justify-center">
               <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
             </div>
