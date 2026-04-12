@@ -385,6 +385,26 @@ export default function ResultsDashboard({ data, onRunDeliberation, audioUrl }: 
                           </span>
                         </div>
                       </div>
+                      {/* Gemini Semantic Context */}
+                      {(sec as any).semantic_context && (
+                        <div className="mb-3 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700/30 space-y-1.5">
+                          <div className="text-xs">
+                            <span className="font-bold text-emerald-400">[SCENE]</span>{' '}
+                            <span className="text-zinc-300">{(sec as any).semantic_context.musical_scene}</span>{' '}
+                            <span className="text-zinc-600">({(sec as any).semantic_context.genre_foundation})</span>
+                          </div>
+                          <div className="text-xs">
+                            <span className="font-bold text-amber-400">[INSTRUMENTS]</span>{' '}
+                            <span className="text-zinc-300">{(sec as any).semantic_context.primary_instruments?.join(' / ')}</span>
+                          </div>
+                          {(sec as any).semantic_context.rhythmic_density && (
+                            <div className="text-xs">
+                              <span className="font-bold text-blue-400">[RHYTHM]</span>{' '}
+                              <span className="text-zinc-400">{(sec as any).semantic_context.rhythmic_density}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
                         <SectionMetric label="LUFS" value={sec.avg_lufs.toFixed(1)} warn={sec.avg_lufs > -12} />
                         <SectionMetric label="WIDTH" value={sec.avg_width.toFixed(3)} />
