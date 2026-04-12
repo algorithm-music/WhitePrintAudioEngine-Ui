@@ -83,7 +83,7 @@ const ALL_STEPS = PHASES.flatMap((phase) =>
   phase.steps.map((step) => ({ ...step, phase: phase.name }))
 );
 
-export default function AnalyzingScreen() {
+export default function AnalyzingScreen({ error }: { error?: string | null }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [elapsed, setElapsed] = useState(0);
 

@@ -22,7 +22,7 @@ const MESSAGES = [
   { sage: 0, text: 'Consensus reached. Preparing adopted parameters...' },
 ];
 
-export default function DeliberatingScreen() {
+export default function DeliberatingScreen({ error }: { error?: string | null }) {
   const [visibleMessages, setVisibleMessages] = useState<number[]>([]);
   const [activeSage, setActiveSage] = useState(0);
 

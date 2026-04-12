@@ -20,7 +20,7 @@ const DSP_STAGES = [
   { name: 'VERIFY', icon: '✓', desc: 'Self-correction check' },
 ];
 
-export default function MasteringScreen() {
+export default function MasteringScreen({ error }: { error?: string | null }) {
   const [currentStage, setCurrentStage] = useState(0);
   const [loop, setLoop] = useState(0);
   const [elapsed, setElapsed] = useState(0);
