@@ -14,6 +14,7 @@ import SiteHeader from '@/components/site-header';
 import { analyzeAudio } from '@/lib/audio-analysis';
 import { runDeliberation } from '@/lib/deliberation';
 import { runMastering } from '@/lib/mastering';
+import { createClient } from '@/lib/supabase/client';
 import type { AnalysisResult } from '@/types/audio';
 import type { DeliberationOutput } from '@/types/deliberation';
 import type { MasteringResult } from '@/types/mastering';
@@ -26,20 +27,60 @@ function AppDashboardInner() {
   const [masteringResult, setMasteringResult] = useState<MasteringResult | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
   const autoStarted = useRef(false);
+
+  const createJob = async (url: string): Promise<string | null> => {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const fileName = url.split('/').pop()?.split('?')[0] || 'untitled';
+      const { data } = await supabase.from('jobs').insert({
+        user_id: user.id,
+        input_gcs_path: url,
+        input_file_name: fileName,
+        status: 'analyzing',
+        route: 'full',
+      }).select('id').single();
+      return data?.id || null;
+    } catch { return null; }
+  };
+
+  const updateJob = async (id: string | null, updates: Record<string, unknown>) => {
+    if (!id) return;
+    try {
+      const supabase = createClient();
+      await supabase.from('jobs').update(updates).eq('id', id);
+    } catch { /* non-blocking */ }
+  };
 
   const handleSubmit = async (url: string) => {
     setAppState('analyzing');
     setError(null);
     setAudioUrl(url);
+    const jid = await createJob(url);
+    setJobId(jid);
     try {
       const result = await analyzeAudio(url);
       setAnalysisResult(result);
       setAppState('results');
+      await updateJob(jid, {
+        status: 'completed',
+        analysis_data: result,
+        lufs_before: result.whole_track_metrics.integrated_lufs,
+        true_peak_before: result.whole_track_metrics.true_peak_dbtp,
+        bpm: result.track_identity.bpm,
+        musical_key: result.track_identity.key,
+        duration_sec: result.track_identity.duration_sec,
+        sample_rate: result.track_identity.sample_rate,
+        bit_depth: result.track_identity.bit_depth,
+      });
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : 'Unknown error occurred during analysis.');
       setAppState('idle');
+      await updateJob(jid, { status: 'failed', error_message: err instanceof Error ? err.message : 'Unknown error' });
     }
   };
 
@@ -81,14 +122,24 @@ function AppDashboardInner() {
     if (!deliberationResult || !audioUrl) return;
     setAppState('mastering');
     setError(null);
+    await updateJob(jobId, { status: 'processing', route: 'dsp_only' });
     try {
       const result = await runMastering(audioUrl, deliberationResult);
       setMasteringResult(result);
       setAppState('mastering_results');
+      await updateJob(jobId, {
+        status: 'completed',
+        lufs_after: result.metrics.lufs_after,
+        true_peak_after: result.metrics.true_peak_after,
+        dynamic_range_after: result.metrics.dynamic_range_after,
+        convergence_loops: result.metrics.convergence_loops,
+        completed_at: new Date().toISOString(),
+      });
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : 'Unknown error occurred during mastering.');
       setAppState('deliberation_results');
+      await updateJob(jobId, { status: 'failed', error_message: err instanceof Error ? err.message : 'Unknown error' });
     }
   };
 
