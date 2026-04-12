@@ -9,19 +9,27 @@ import { useState } from 'react';
 interface DeliberationDashboardProps {
   data: DeliberationOutput;
   onRunMastering?: () => void;
+  onReset?: () => void;
 }
 
-export default function DeliberationDashboard({ data, onRunMastering }: DeliberationDashboardProps) {
+export default function DeliberationDashboard({ data, onRunMastering, onReset }: DeliberationDashboardProps) {
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
 
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6 pb-24">
       {/* View Toggle */}
       <div className="flex justify-between items-center mb-2">
-        <h2 className="text-xl font-mono font-bold text-white flex items-center gap-3">
-          <BrainCircuit className="w-6 h-6 text-indigo-400" />
-          DELIBERATION_COMPLETE
-        </h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-xl font-mono font-bold text-white flex items-center gap-3">
+            <BrainCircuit className="w-6 h-6 text-indigo-400" />
+            DELIBERATION_COMPLETE
+          </h2>
+          {onReset && (
+            <button onClick={onReset} className="text-[10px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors uppercase border border-zinc-800 rounded px-2 py-1 bg-zinc-900/50">
+              [ New_Session ]
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-4">
           {onRunMastering && (
             <button

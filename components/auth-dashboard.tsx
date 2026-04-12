@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { PlayCircle, Clock, Zap, ExternalLink, CheckCircle2, AlertCircle, Activity, FileAudio, Music, Terminal, Code } from 'lucide-react';
+import { PlayCircle, Clock, Zap, ExternalLink, CheckCircle2, AlertCircle, Activity, FileAudio, Music, Terminal, ChevronDown, ChevronRight, Volume2 } from 'lucide-react';
 import HeroUrlInput from '@/components/marketing/hero-url-input';
 import { createClient } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
@@ -22,6 +22,8 @@ type Job = {
   duration_sec: number | null;
   created_at: string;
   completed_at: string | null;
+  consensus_opinions: Record<string, unknown> | null;
+  analysis_data: Record<string, unknown> | null;
 };
 
 type AuthDashboardContentProps = {
@@ -33,14 +35,15 @@ type AuthDashboardContentProps = {
 export default function AuthDashboardContent({ user, onSubmit, error }: AuthDashboardContentProps) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'gui' | 'cli'>('gui');
+  const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [howToTab, setHowToTab] = useState<'gui' | 'cli'>('gui');
 
   useEffect(() => {
     async function loadHistory() {
       const supabase = createClient();
       const { data } = await supabase
         .from('jobs')
-        .select('id, input_gcs_path, input_file_name, status, route, lufs_before, lufs_after, true_peak_before, true_peak_after, bpm, musical_key, duration_sec, created_at, completed_at')
+        .select('id, input_gcs_path, input_file_name, status, route, lufs_before, lufs_after, true_peak_before, true_peak_after, bpm, musical_key, duration_sec, created_at, completed_at, consensus_opinions, analysis_data')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(10);
@@ -102,22 +105,6 @@ export default function AuthDashboardContent({ user, onSubmit, error }: AuthDash
                 <span>{error}</span>
               </div>
             )}
-            {/* Terminal hint */}
-            <details className="mt-4 group/details">
-              <summary className="text-[11px] font-mono text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors select-none">
-                Prefer your terminal? →
-              </summary>
-              <pre className="mt-2 px-4 py-3 rounded-lg bg-zinc-900/60 border border-zinc-800/40 text-[11px] font-mono text-emerald-400/80 overflow-x-auto whitespace-pre leading-relaxed">
-{`curl -X POST https://concertmaster.aimastering.tech/api/v1/jobs/master \\
-  -H "X-Api-Key: YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"audio_url":"https://...","route":"full"}' \\
-  -o mastered.wav`}
-              </pre>
-              <Link href="/developers/docs/quickstart" className="inline-block mt-2 text-[11px] font-mono text-indigo-400 hover:text-indigo-300">
-                Full API Reference →
-              </Link>
-            </details>
           </div>
         </div>
 
@@ -132,7 +119,7 @@ export default function AuthDashboardContent({ user, onSubmit, error }: AuthDash
                 Recent Sessions
               </h3>
               <Link href="/app/history" className="text-xs font-mono text-zinc-500 hover:text-indigo-400 transition-colors">
-                View All →
+                View All
               </Link>
             </div>
 
@@ -147,55 +134,114 @@ export default function AuthDashboardContent({ user, onSubmit, error }: AuthDash
             ) : (
               <div className="space-y-2">
                 {jobs.map((job) => (
-                  <div
-                    key={job.id}
-                    className="group flex items-center gap-4 p-4 rounded-xl border border-zinc-800/40 bg-zinc-950/30 hover:bg-zinc-900/50 transition-colors"
-                  >
-                    {/* Track info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-zinc-200 truncate">{getDisplayName(job)}</span>
-                        <span className={`text-[10px] font-mono font-bold ${statusColor(job.status)}`}>
-                          {job.status.toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-1 text-[11px] text-zinc-500 font-mono">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {new Date(job.created_at).toLocaleDateString()}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <FileAudio className="w-3 h-3" />
-                          {formatDuration(job.duration_sec)}
-                        </span>
-                        {job.bpm && (
-                          <span>{Math.round(Number(job.bpm))} BPM</span>
-                        )}
-                        {job.musical_key && (
-                          <span className="flex items-center gap-1">
-                            <Music className="w-3 h-3" />
-                            {job.musical_key}
+                  <div key={job.id} className="rounded-xl border border-zinc-800/40 bg-zinc-950/30 overflow-hidden">
+                    {/* Row */}
+                    <button
+                      onClick={() => setExpandedJob(expandedJob === job.id ? null : job.id)}
+                      className="w-full flex items-center gap-4 p-4 hover:bg-zinc-900/50 transition-colors text-left"
+                    >
+                      {expandedJob === job.id
+                        ? <ChevronDown className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                        : <ChevronRight className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                      }
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-zinc-200 truncate">{getDisplayName(job)}</span>
+                          <span className={`text-[10px] font-mono font-bold ${statusColor(job.status)}`}>
+                            {job.status.toUpperCase()}
                           </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-[11px] text-zinc-500 font-mono">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(job.created_at).toLocaleDateString()}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <FileAudio className="w-3 h-3" />
+                            {formatDuration(job.duration_sec)}
+                          </span>
+                          {job.bpm && <span>{Math.round(Number(job.bpm))} BPM</span>}
+                          {job.musical_key && (
+                            <span className="flex items-center gap-1">
+                              <Music className="w-3 h-3" />
+                              {job.musical_key}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* LUFS change */}
+                      {job.lufs_before != null && job.lufs_after != null && (
+                        <div className="hidden md:flex items-center gap-2 font-mono text-xs shrink-0">
+                          <span className="text-zinc-500">{Number(job.lufs_before).toFixed(1)}</span>
+                          <span className="text-zinc-600">&rarr;</span>
+                          <span className="text-emerald-400 font-bold">{Number(job.lufs_after).toFixed(1)} LUFS</span>
+                        </div>
+                      )}
+                    </button>
+
+                    {/* Expanded detail */}
+                    {expandedJob === job.id && (
+                      <div className="px-4 pb-4 pt-0 border-t border-zinc-800/40">
+                        <div className="grid gap-4 sm:grid-cols-2 mt-4">
+                          {/* Analysis summary */}
+                          <div className="p-3 rounded-lg bg-zinc-900/50 border border-zinc-800/30">
+                            <h4 className="text-[10px] font-mono text-zinc-500 uppercase mb-2">Analysis</h4>
+                            <div className="space-y-1 text-xs font-mono text-zinc-300">
+                              {job.lufs_before != null && <div>LUFS: {Number(job.lufs_before).toFixed(1)}</div>}
+                              {job.true_peak_before != null && <div>True Peak: {Number(job.true_peak_before).toFixed(2)} dBTP</div>}
+                              {job.bpm && <div>BPM: {Math.round(Number(job.bpm))}</div>}
+                              {job.musical_key && <div>Key: {job.musical_key}</div>}
+                              {job.duration_sec && <div>Duration: {formatDuration(job.duration_sec)}</div>}
+                            </div>
+                          </div>
+
+                          {/* Mastering result */}
+                          {job.lufs_after != null ? (
+                            <div className="p-3 rounded-lg bg-zinc-900/50 border border-zinc-800/30">
+                              <h4 className="text-[10px] font-mono text-zinc-500 uppercase mb-2">Mastering Result</h4>
+                              <div className="space-y-1 text-xs font-mono text-zinc-300">
+                                <div className="flex justify-between">
+                                  <span className="text-zinc-500">LUFS</span>
+                                  <span>{Number(job.lufs_before).toFixed(1)} &rarr; <span className="text-emerald-400 font-bold">{Number(job.lufs_after).toFixed(1)}</span></span>
+                                </div>
+                                {job.true_peak_after != null && (
+                                  <div className="flex justify-between">
+                                    <span className="text-zinc-500">True Peak</span>
+                                    <span>{Number(job.true_peak_before).toFixed(2)} &rarr; <span className="text-emerald-400 font-bold">{Number(job.true_peak_after).toFixed(2)} dBTP</span></span>
+                                  </div>
+                                )}
+                                {job.completed_at && (
+                                  <div className="flex justify-between">
+                                    <span className="text-zinc-500">Completed</span>
+                                    <span>{new Date(job.completed_at).toLocaleString()}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-3 rounded-lg bg-zinc-900/50 border border-zinc-800/30 flex items-center justify-center">
+                              <span className="text-xs text-zinc-600 font-mono">
+                                {job.status === 'failed' ? 'Mastering failed' : 'Analysis only'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Consensus opinions (deliberation log) */}
+                        {job.consensus_opinions && (
+                          <div className="mt-4 p-3 rounded-lg bg-zinc-900/50 border border-zinc-800/30">
+                            <h4 className="text-[10px] font-mono text-zinc-500 uppercase mb-2">Deliberation Log</h4>
+                            <pre className="text-[11px] font-mono text-zinc-400 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto">
+                              {JSON.stringify(job.consensus_opinions, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+
+                        {job.status === 'failed' && (
+                          <p className="mt-3 text-xs text-red-400/70 font-mono">Session failed. No mastering output.</p>
                         )}
                       </div>
-                    </div>
-
-                    {/* LUFS change */}
-                    {job.lufs_before != null && job.lufs_after != null && (
-                      <div className="hidden md:block text-right font-mono text-xs shrink-0">
-                        <div className="text-zinc-500">{Number(job.lufs_before).toFixed(1)}</div>
-                        <div className="text-emerald-400 font-bold">{Number(job.lufs_after).toFixed(1)} LUFS</div>
-                      </div>
-                    )}
-
-                    {/* Re-run button */}
-                    {job.input_gcs_path && (
-                      <Link
-                        href={`/?url=${encodeURIComponent(job.input_gcs_path)}`}
-                        className="shrink-0 text-xs font-mono text-indigo-400 hover:text-indigo-300 px-3 py-1.5 border border-indigo-500/30 rounded-lg hover:border-indigo-500/50 transition-colors opacity-0 group-hover:opacity-100"
-                      >
-                        Re-run
-                      </Link>
                     )}
                   </div>
                 ))}
@@ -213,18 +259,9 @@ export default function AuthDashboardContent({ user, onSubmit, error }: AuthDash
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
               </div>
               <ul className="mt-4 space-y-2 text-xs text-zinc-400">
-                <li className="flex items-center gap-2">
-                  <span className="w-1 h-1 rounded-full bg-emerald-500" />
-                  Unlimited Analyses
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-1 h-1 rounded-full bg-emerald-500" />
-                  3-Agent Deliberation
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-1 h-1 rounded-full bg-emerald-500" />
-                  WAV 44.1k / 48kHz
-                </li>
+                <li className="flex items-center gap-2"><span className="w-1 h-1 rounded-full bg-emerald-500" /> Unlimited Analyses</li>
+                <li className="flex items-center gap-2"><span className="w-1 h-1 rounded-full bg-emerald-500" /> 3-Agent Deliberation</li>
+                <li className="flex items-center gap-2"><span className="w-1 h-1 rounded-full bg-emerald-500" /> WAV 44.1k / 48kHz</li>
               </ul>
               <div className="mt-4 pt-4 border-t border-zinc-800/60">
                 <Link href="/pricing" className="text-xs font-mono text-indigo-400 hover:text-indigo-300 flex items-center justify-between group">
@@ -234,17 +271,67 @@ export default function AuthDashboardContent({ user, onSubmit, error }: AuthDash
               </div>
             </div>
 
-            {/* How to use (compact) */}
+            {/* How to use — GUI / CLI tabs */}
             <div className="p-5 rounded-xl border border-zinc-800/60 bg-zinc-900/20">
-              <h3 className="text-[10px] font-mono tracking-wider text-zinc-500 uppercase mb-3 flex items-center gap-1.5">
-                <Zap className="w-3 h-3 text-amber-400" />
-                Quick Start
-              </h3>
-              <ol className="space-y-2 text-xs text-zinc-400">
-                <li><span className="text-indigo-400 font-mono font-bold mr-1.5">01</span> Upload .wav to Google Drive (public link)</li>
-                <li><span className="text-indigo-400 font-mono font-bold mr-1.5">02</span> Paste the URL above</li>
-                <li><span className="text-indigo-400 font-mono font-bold mr-1.5">03</span> 3 AIs deliberate, then download your master</li>
-              </ol>
+              <div className="flex items-center gap-3 mb-4">
+                <h3 className="text-[10px] font-mono tracking-wider text-zinc-500 uppercase flex items-center gap-1.5">
+                  <Zap className="w-3 h-3 text-amber-400" />
+                  How to Use
+                </h3>
+                <div className="flex rounded-md border border-zinc-800 overflow-hidden ml-auto">
+                  <button
+                    onClick={() => setHowToTab('gui')}
+                    className={`px-2.5 py-1 text-[10px] font-mono transition-colors ${howToTab === 'gui' ? 'bg-indigo-600/20 text-indigo-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    GUI
+                  </button>
+                  <button
+                    onClick={() => setHowToTab('cli')}
+                    className={`px-2.5 py-1 text-[10px] font-mono transition-colors ${howToTab === 'cli' ? 'bg-emerald-600/20 text-emerald-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    CLI
+                  </button>
+                </div>
+              </div>
+
+              {howToTab === 'gui' ? (
+                <ol className="space-y-2.5 text-xs text-zinc-400">
+                  <li>
+                    <span className="text-indigo-400 font-mono font-bold mr-1.5">01</span>
+                    Upload <code className="text-zinc-300">.wav</code> to Google Drive
+                    <span className="block text-[10px] text-zinc-600 mt-0.5 ml-5">Set sharing to &quot;Anyone with the link&quot;</span>
+                  </li>
+                  <li>
+                    <span className="text-indigo-400 font-mono font-bold mr-1.5">02</span>
+                    Paste the URL above
+                  </li>
+                  <li>
+                    <span className="text-indigo-400 font-mono font-bold mr-1.5">03</span>
+                    3 AIs deliberate, then download your master
+                  </li>
+                </ol>
+              ) : (
+                <div className="space-y-3">
+                  <pre className="px-3 py-2.5 rounded-lg bg-zinc-950 border border-zinc-800 text-[10px] font-mono text-emerald-400/80 overflow-x-auto whitespace-pre leading-relaxed">
+{`curl -X POST \\
+  https://concertmaster.aimastering.tech\\
+/api/v1/jobs/master \\
+  -H "X-Api-Key: YOUR_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"audio_url":"URL",
+       "route":"full"}' \\
+  -o mastered.wav`}
+                  </pre>
+                  <div className="flex items-center justify-between">
+                    <Link href="/developers/docs/quickstart" className="text-[10px] font-mono text-indigo-400 hover:text-indigo-300">
+                      Full API Docs →
+                    </Link>
+                    <Link href="/app/settings" className="text-[10px] font-mono text-emerald-400/70 hover:text-emerald-300">
+                      Get API Key →
+                    </Link>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
