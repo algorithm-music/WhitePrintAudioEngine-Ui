@@ -12,7 +12,7 @@ type AuthDashboardContentProps = {
 
 export default function AuthDashboardContent({ user, onSubmit, error }: AuthDashboardContentProps) {
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 flex flex-col pt-24 pb-20 selection:bg-indigo-500/30">
+    <div className="bg-[#0a0a0a] text-zinc-100 flex flex-col pt-8 pb-20 selection:bg-indigo-500/30">
       <div className="max-w-6xl mx-auto px-6 w-full space-y-12">
         
         {/* Header / Greeting */}

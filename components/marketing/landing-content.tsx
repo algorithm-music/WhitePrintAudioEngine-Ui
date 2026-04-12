@@ -50,7 +50,7 @@ const stats = [
 
 export default function LandingContent({ onSubmit, error }: { onSubmit: (url: string) => void; error?: string | null }) {
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 flex flex-col w-full">
+    <div className="bg-[#0a0a0a] text-zinc-100 flex flex-col w-full">
       <main className="flex-1 w-full">
         <WebApplicationJsonLd />
         <OrganizationJsonLd />

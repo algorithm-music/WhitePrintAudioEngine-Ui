@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import SiteHeader from '@/components/site-header';
+import MarketingHeader from '@/components/layout/marketing-header';
 import { PlayCircle, Clock, Activity, FileAudio, AlertCircle, CheckCircle2, ChevronRight, Music } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -91,11 +91,11 @@ export default function HistoryPage() {
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-zinc-100 font-sans selection:bg-indigo-500/30">
-      <SiteHeader>
+      <MarketingHeader>
         <Link href="/" className="text-xs font-mono text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded border border-zinc-800 hover:border-zinc-600">
           [ DASHBOARD ]
         </Link>
-      </SiteHeader>
+      </MarketingHeader>
 
       <div className="max-w-5xl mx-auto px-6 py-12 pb-24">
         <div className="flex items-center gap-4 mb-8">

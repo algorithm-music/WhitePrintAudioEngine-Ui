@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import SiteHeader from '@/components/site-header';
+import MarketingHeader from '@/components/layout/marketing-header';
 
 type BillingInfo = {
   plan: string;
@@ -101,11 +101,11 @@ export default function SettingsPage() {
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-zinc-100 font-sans">
-      <SiteHeader>
+      <MarketingHeader>
         <Link href="/app" className="text-xs font-mono text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded border border-zinc-800 hover:border-zinc-600">
           [ BACK ]
         </Link>
-      </SiteHeader>
+      </MarketingHeader>
 
       <div className="max-w-2xl mx-auto px-6 py-12 space-y-10">
         <h1 className="text-2xl font-bold text-white">Account Settings</h1>

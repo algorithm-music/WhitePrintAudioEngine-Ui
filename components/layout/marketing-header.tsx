@@ -21,7 +21,7 @@ const appNavItems = [
   { href: '/developers/docs', label: 'API_DOCS' },
 ];
 
-export default function MarketingHeader() {
+export default function MarketingHeader({ children }: { children?: React.ReactNode }) {
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,7 +71,10 @@ export default function MarketingHeader() {
             ))}
           </nav>
         </div>
-        <UserMenu />
+        <div className="flex items-center gap-3">
+          {children}
+          <UserMenu />
+        </div>
       </div>
     </header>
   );

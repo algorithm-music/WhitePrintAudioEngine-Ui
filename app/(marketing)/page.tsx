@@ -118,13 +118,13 @@ function AppDashboardInner() {
   // Auto-start analysis if URL is passed via query param (from LP hero or history page)
   useEffect(() => {
     const urlParam = searchParams.get('url');
-    // We can auto-start whether auth is loaded or not if they provide a URL directly
-    if (urlParam && !autoStarted.current && appState === 'idle') {
+    // We can auto-start only after auth is loaded, to ensure jobs are created associated with the user
+    if (urlParam && !authLoading && !autoStarted.current && appState === 'idle') {
       autoStarted.current = true;
       handleSubmit(urlParam);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [searchParams, authLoading, appState]);
 
   const handleReset = () => {
     setAppState('idle');
@@ -176,118 +176,105 @@ function AppDashboardInner() {
   };
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a] text-zinc-100 font-sans selection:bg-indigo-500/30 overflow-hidden flex flex-col">
-      <div className="flex-1 relative">
-        {(appState === 'results' || appState === 'deliberation_results' || appState === 'mastering_results') && (
-          <div className="absolute top-4 right-6 z-40">
-            <button
-              onClick={handleReset}
-              className="text-xs font-mono text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded border border-zinc-800 hover:border-zinc-600 bg-zinc-950/80 backdrop-blur"
-            >
-              [ NEW_SESSION ]
-            </button>
-          </div>
+    <div className="flex-1 flex flex-col">
+      <AnimatePresence mode="wait">
+        {appState === 'idle' && (
+          <motion.div
+            key="idle"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, filter: 'blur(10px)' }}
+            transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+            className="flex-1"
+          >
+            {authLoading ? (
+               <div className="flex items-center justify-center py-40">
+                  <div className="w-6 h-6 rounded bg-indigo-500 animate-pulse" />
+               </div>
+            ) : user ? (
+              <AuthDashboardContent user={user} onSubmit={handleSubmit} error={error} />
+            ) : (
+              <LandingContent onSubmit={handleSubmit} error={error} />
+            )}
+          </motion.div>
         )}
 
-        <AnimatePresence mode="wait">
-          {appState === 'idle' && (
-            <motion.div
-              key="idle"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, filter: 'blur(10px)' }}
-              transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-              className={user ? 'absolute inset-0 overflow-y-auto' : 'absolute inset-0 flex items-center justify-center'}
-            >
-              {authLoading ? (
-                 <div className="flex-1 flex items-center justify-center h-full w-full bg-[#0a0a0a]">
-                    <div className="w-6 h-6 rounded bg-indigo-500 animate-pulse" />
-                 </div>
-              ) : user ? (
-                <AuthDashboardContent user={user} onSubmit={handleSubmit} error={error} />
-              ) : (
-                <LandingContent onSubmit={handleSubmit} error={error} />
-              )}
-            </motion.div>
-          )}
+        {appState === 'analyzing' && (
+          <motion.div
+            key="analyzing"
+            initial={{ opacity: 0, scale: 1.05, filter: 'blur(10px)' }}
+            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
+            transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+            className="flex-1 flex items-center justify-center p-6"
+          >
+            <AnalyzingScreen error={error} />
+          </motion.div>
+        )}
 
-          {appState === 'analyzing' && (
-            <motion.div
-              key="analyzing"
-              initial={{ opacity: 0, scale: 1.05, filter: 'blur(10px)' }}
-              animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
-              transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-              className="absolute inset-0 flex items-center justify-center p-6"
-            >
-              <AnalyzingScreen error={error} />
-            </motion.div>
-          )}
+        {appState === 'results' && analysisResult && (
+          <motion.div
+            key="results"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1], delay: 0.1 }}
+            className="flex-1 pt-4 pb-24"
+          >
+            <ResultsDashboard data={analysisResult} onRunDeliberation={handleRunDeliberation} audioUrl={audioUrl} onReset={handleReset} />
+          </motion.div>
+        )}
 
-          {appState === 'results' && analysisResult && (
-            <motion.div
-              key="results"
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1], delay: 0.1 }}
-              className="absolute inset-0 overflow-y-auto"
-            >
-              <ResultsDashboard data={analysisResult} onRunDeliberation={handleRunDeliberation} audioUrl={audioUrl} />
-            </motion.div>
-          )}
+        {appState === 'deliberating' && (
+          <motion.div
+            key="deliberating"
+            initial={{ opacity: 0, scale: 1.05, filter: 'blur(10px)' }}
+            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
+            transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+            className="flex-1 flex items-center justify-center p-6"
+          >
+            <DeliberatingScreen error={error} />
+          </motion.div>
+        )}
 
-          {appState === 'deliberating' && (
-            <motion.div
-              key="deliberating"
-              initial={{ opacity: 0, scale: 1.05, filter: 'blur(10px)' }}
-              animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
-              transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-              className="absolute inset-0 flex items-center justify-center p-6"
-            >
-              <DeliberatingScreen error={error} />
-            </motion.div>
-          )}
+        {appState === 'deliberation_results' && deliberationResult && (
+          <motion.div
+            key="deliberation_results"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1], delay: 0.1 }}
+            className="flex-1 pt-4 pb-24"
+          >
+            <DeliberationDashboard data={deliberationResult} onRunMastering={handleRunMastering} onReset={handleReset} />
+          </motion.div>
+        )}
 
-          {appState === 'deliberation_results' && deliberationResult && (
-            <motion.div
-              key="deliberation_results"
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1], delay: 0.1 }}
-              className="absolute inset-0 overflow-y-auto"
-            >
-              <DeliberationDashboard data={deliberationResult} onRunMastering={handleRunMastering} />
-            </motion.div>
-          )}
+        {appState === 'mastering' && (
+          <motion.div
+            key="mastering"
+            initial={{ opacity: 0, scale: 1.05, filter: 'blur(10px)' }}
+            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
+            transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+            className="flex-1 flex items-center justify-center p-6"
+          >
+            <MasteringScreen error={error} />
+          </motion.div>
+        )}
 
-          {appState === 'mastering' && (
-            <motion.div
-              key="mastering"
-              initial={{ opacity: 0, scale: 1.05, filter: 'blur(10px)' }}
-              animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
-              transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-              className="absolute inset-0 flex items-center justify-center p-6"
-            >
-              <MasteringScreen error={error} />
-            </motion.div>
-          )}
-
-          {appState === 'mastering_results' && masteringResult && (
-            <motion.div
-              key="mastering_results"
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1], delay: 0.1 }}
-              className="absolute inset-0 overflow-y-auto"
-            >
-              <MasteringDashboard data={masteringResult} audioUrl={audioUrl} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </main>
+        {appState === 'mastering_results' && masteringResult && (
+          <motion.div
+            key="mastering_results"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1], delay: 0.1 }}
+            className="flex-1 pt-4 pb-24"
+          >
+            <MasteringDashboard data={masteringResult} audioUrl={audioUrl} onReset={handleReset} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
