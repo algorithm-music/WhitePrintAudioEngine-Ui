@@ -23,9 +23,9 @@ ENV PORT=8080
 
 RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser
 
-COPY --from=builder /app/public ./public
 COPY --from=builder --chown=appuser:appuser /app/.next/standalone ./
 COPY --from=builder --chown=appuser:appuser /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
 USER appuser
 EXPOSE 8080
