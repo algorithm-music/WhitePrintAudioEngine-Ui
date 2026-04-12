@@ -62,12 +62,12 @@ function AppDashboardInner() {
     setError(null);
   };
 
-  const handleRunDeliberation = async () => {
+  const handleRunDeliberation = async (targetLufs: number = -14.0, targetTruePeak: number = -1.0) => {
     if (!analysisResult || !audioUrl) return;
     setAppState('deliberating');
     setError(null);
     try {
-      const result = await runDeliberation(audioUrl);
+      const result = await runDeliberation(audioUrl, targetLufs, targetTruePeak);
       setDeliberationResult(result);
       setAppState('deliberation_results');
     } catch (err) {

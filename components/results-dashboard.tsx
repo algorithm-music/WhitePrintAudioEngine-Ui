@@ -3,16 +3,24 @@
 import type { AnalysisResult } from '@/types/audio';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from 'recharts';
 import { AlertTriangle, CheckCircle2, Activity, Volume2, Maximize, Layers, Code, LayoutDashboard, ListMusic, BrainCircuit } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import PlatformSelector from '@/components/platform-selector';
 
 interface ResultsDashboardProps {
   data: AnalysisResult;
-  onRunDeliberation?: () => void;
+  onRunDeliberation?: (targetLufs: number, targetTruePeak: number) => void;
 }
 
 export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDashboardProps) {
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
+  const [targetLufs, setTargetLufs] = useState(-14.0);
+  const [targetTruePeak, setTargetTruePeak] = useState(-1.0);
+
+  const handlePlatformSelect = useCallback((lufs: number, truePeak: number) => {
+    setTargetLufs(lufs);
+    setTargetTruePeak(truePeak);
+  }, []);
   const { track_identity, whole_track_metrics, time_series_circuit_envelopes, physical_sections, detected_problems } = data;
 
   // Prepare chart data
@@ -34,7 +42,7 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
         <div className="flex items-center gap-4">
           {onRunDeliberation && (
             <button
-              onClick={onRunDeliberation}
+              onClick={() => onRunDeliberation(targetLufs, targetTruePeak)}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition-colors"
             >
               <BrainCircuit className="w-4 h-4" />
@@ -105,6 +113,13 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
               </div>
             </div>
           </div>
+
+          {/* Platform / Target Selection */}
+          {onRunDeliberation && (
+            <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5">
+              <PlatformSelector onSelect={handlePlatformSelect} />
+            </div>
+          )}
 
           {/* Main Chart: Time-Series Circuit Envelopes */}
           <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5">
