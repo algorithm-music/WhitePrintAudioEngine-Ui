@@ -36,6 +36,12 @@ steps:
       - '80'
       - '--port'
       - '8080'
+      - '--timeout'
+      - '600'
+      - '--set-env-vars'
+      - 'CONCERTMASTER_URL=https://concertmaster.aimastering.tech'
+      - '--set-secrets'
+      - 'CONCERTMASTER_API_KEY=CONCERTMASTER_API_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_KEY:latest'
       - '--quiet'
 
 images:

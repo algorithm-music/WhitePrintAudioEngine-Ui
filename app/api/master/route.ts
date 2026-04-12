@@ -7,6 +7,9 @@ const CONCERTMASTER_API_KEY = process.env.CONCERTMASTER_API_KEY || '';
 // Free plan limits (no billing record = free)
 const FREE_TRACKS_LIMIT = 3;
 
+export const maxDuration = 600; // 10 minutes max duration for Vercel Pro
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   if (!CONCERTMASTER_API_KEY) {
     return NextResponse.json(

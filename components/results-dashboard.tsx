@@ -202,8 +202,8 @@ export default function ResultsDashboard({ data, onRunDeliberation, audioUrl }: 
               </div>
             </div>
             
-            <div className="w-full h-[300px]">
-              <ResponsiveContainer width="100%" height={300}>
+            <div className="w-full" style={{ minHeight: 300, height: 300 }}>
+              <ResponsiveContainer width="100%" height={300} minWidth={0}>
                 <LineChart data={chartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                   <XAxis 

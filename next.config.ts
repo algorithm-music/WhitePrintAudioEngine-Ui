@@ -20,6 +20,10 @@ const nextConfig: NextConfig = {
   },
   output: 'standalone',
   transpilePackages: ['motion'],
+  experimental: {
+    // Suppress unused CSS preload warnings (Tailwind v4 + standalone)
+    optimizeCss: false,
+  },
   async redirects() {
     return [
       {
