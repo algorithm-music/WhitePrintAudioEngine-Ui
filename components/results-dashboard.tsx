@@ -1,21 +1,52 @@
 'use client';
 
 import type { AnalysisResult } from '@/types/audio';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from 'recharts';
 import { AlertTriangle, CheckCircle2, Activity, Volume2, Maximize, Layers, Code, LayoutDashboard, ListMusic, BrainCircuit } from 'lucide-react';
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import PlatformSelector from '@/components/platform-selector';
 
 interface ResultsDashboardProps {
   data: AnalysisResult;
   onRunDeliberation?: (targetLufs: number, targetTruePeak: number) => void;
+  audioUrl?: string | null;
 }
 
-export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDashboardProps) {
+export default function ResultsDashboard({ data, onRunDeliberation, audioUrl }: ResultsDashboardProps) {
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
   const [targetLufs, setTargetLufs] = useState(-14.0);
   const [targetTruePeak, setTargetTruePeak] = useState(-1.0);
+  const [showPlatformModal, setShowPlatformModal] = useState(false);
+  const [playbackTime, setPlaybackTime] = useState<number | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (!audioUrl) return;
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+    const onTime = () => setPlaybackTime(audio.currentTime);
+    const onEnd = () => { setIsPlaying(false); setPlaybackTime(null); };
+    audio.addEventListener('timeupdate', onTime);
+    audio.addEventListener('ended', onEnd);
+    return () => {
+      audio.removeEventListener('timeupdate', onTime);
+      audio.removeEventListener('ended', onEnd);
+      audio.pause();
+    };
+  }, [audioUrl]);
+
+  const togglePlay = useCallback(() => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
+  }, [isPlaying]);
 
   const handlePlatformSelect = useCallback((lufs: number, truePeak: number) => {
     setTargetLufs(lufs);
@@ -42,7 +73,7 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
         <div className="flex items-center gap-4">
           {onRunDeliberation && (
             <button
-              onClick={() => onRunDeliberation(targetLufs, targetTruePeak)}
+              onClick={() => setShowPlatformModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition-colors"
             >
               <BrainCircuit className="w-4 h-4" />
@@ -114,19 +145,50 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
             </div>
           </div>
 
-          {/* Platform / Target Selection */}
-          {onRunDeliberation && (
-            <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5">
-              <PlatformSelector onSelect={handlePlatformSelect} />
-            </div>
+          {/* Platform Selection Modal */}
+          {showPlatformModal && onRunDeliberation && (
+            <>
+              <div className="fixed inset-0 bg-black/70 z-50" onClick={() => setShowPlatformModal(false)} />
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-2xl p-6 space-y-4 shadow-2xl">
+                  <PlatformSelector onSelect={handlePlatformSelect} />
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button
+                      onClick={() => setShowPlatformModal(false)}
+                      className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => { setShowPlatformModal(false); onRunDeliberation(targetLufs, targetTruePeak); }}
+                      className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold transition-colors"
+                    >
+                      <BrainCircuit className="w-4 h-4" />
+                      START DELIBERATION
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
           {/* Main Chart: Time-Series Circuit Envelopes */}
           <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                <Layers className="w-4 h-4" /> Time_Series_Circuit_Envelopes
-              </h3>
+              <div className="flex items-center gap-4">
+                <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                  <Layers className="w-4 h-4" /> Time_Series_Circuit_Envelopes
+                </h3>
+                {audioUrl && (
+                  <button
+                    onClick={togglePlay}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono transition-colors ${isPlaying ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
+                  >
+                    {isPlaying ? '⏸ PAUSE' : '▶ PLAY'}
+                    {playbackTime != null && <span className="tabular-nums">{Math.floor(playbackTime / 60)}:{String(Math.round(playbackTime % 60)).padStart(2, '0')}</span>}
+                  </button>
+                )}
+              </div>
               <div className="flex gap-4 text-xs font-mono">
                 <span className="flex items-center gap-1 text-indigo-400"><div className="w-2 h-2 bg-indigo-400 rounded-full"/> LUFS</span>
                 <span className="flex items-center gap-1 text-emerald-400"><div className="w-2 h-2 bg-emerald-400 rounded-full"/> Crest (dB)</span>
@@ -180,6 +242,9 @@ export default function ResultsDashboard({ data, onRunDeliberation }: ResultsDas
                   <Line yAxisId="left" type="monotone" dataKey="lufs" stroke="#818cf8" strokeWidth={2} dot={false} isAnimationActive={false} />
                   <Line yAxisId="right" type="monotone" dataKey="crest" stroke="#34d399" strokeWidth={1.5} dot={false} isAnimationActive={false} />
                   <Line yAxisId="right" type="monotone" dataKey="width" stroke="#fbbf24" strokeWidth={1} dot={false} isAnimationActive={false} />
+                  {playbackTime != null && (
+                    <ReferenceLine yAxisId="left" x={playbackTime} stroke="#ef4444" strokeWidth={2} strokeDasharray="none" />
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             </div>
