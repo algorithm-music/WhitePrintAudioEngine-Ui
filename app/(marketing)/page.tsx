@@ -11,7 +11,7 @@ import DeliberatingScreen from '@/components/deliberating-screen';
 import DeliberationDashboard from '@/components/deliberation-dashboard';
 import MasteringScreen from '@/components/mastering-screen';
 import MasteringDashboard from '@/components/mastering-dashboard';
-import SiteHeader from '@/components/site-header';
+
 import { analyzeAudio } from '@/lib/audio-analysis';
 import { runDeliberation } from '@/lib/deliberation';
 import { runMastering } from '@/lib/mastering';
@@ -177,21 +177,18 @@ function AppDashboardInner() {
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-zinc-100 font-sans selection:bg-indigo-500/30 overflow-hidden flex flex-col">
-      {/* Conditionally render header depending on state or if it's the auth dashboard */}
-      {appState !== 'idle' || (appState === 'idle' && user) ? (
-        <SiteHeader>
-          {(appState === 'results' || appState === 'deliberation_results' || appState === 'mastering_results') && (
+      <div className="flex-1 relative">
+        {(appState === 'results' || appState === 'deliberation_results' || appState === 'mastering_results') && (
+          <div className="absolute top-4 right-6 z-40">
             <button
               onClick={handleReset}
-              className="text-xs font-mono text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded border border-zinc-800 hover:border-zinc-600"
+              className="text-xs font-mono text-zinc-400 hover:text-white transition-colors px-3 py-1.5 rounded border border-zinc-800 hover:border-zinc-600 bg-zinc-950/80 backdrop-blur"
             >
               [ NEW_SESSION ]
             </button>
-          )}
-        </SiteHeader>
-      ) : null}
+          </div>
+        )}
 
-      <div className="flex-1 relative">
         <AnimatePresence mode="wait">
           {appState === 'idle' && (
             <motion.div
