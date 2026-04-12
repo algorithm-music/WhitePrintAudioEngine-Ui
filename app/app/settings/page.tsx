@@ -30,10 +30,9 @@ export default function SettingsPage() {
   const [company, setCompany] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const supabase = createClient();
-
   useEffect(() => {
     async function load() {
+      const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         window.location.href = '/login?redirect=/app/settings';
@@ -66,6 +65,7 @@ export default function SettingsPage() {
   const handleSaveProfile = async () => {
     setSaving(true);
     setMessage(null);
+    const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
@@ -82,6 +82,7 @@ export default function SettingsPage() {
   };
 
   const handleSignOut = async () => {
+    const supabase = createClient();
     await supabase.auth.signOut();
     window.location.href = '/';
   };

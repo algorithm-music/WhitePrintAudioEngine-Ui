@@ -12,10 +12,9 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const supabase = createClient();
-
   const handleOAuth = async (provider: 'google' | 'github') => {
     setError(null);
+    const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -29,6 +28,7 @@ export default function SignupPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    const supabase = createClient();
     const { error } = await supabase.auth.signUp({
       email,
       password,
