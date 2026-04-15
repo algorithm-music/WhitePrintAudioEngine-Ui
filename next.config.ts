@@ -20,6 +20,11 @@ const nextConfig: NextConfig = {
   },
   output: 'standalone',
   transpilePackages: ['motion'],
+  experimental: {
+    // Disable CSS chunking so all CSS is bundled into a single file.
+    // Prevents CSS from being dropped in standalone/Cloud Run builds.
+    cssChunking: false,
+  },
   async redirects() {
     return [
       {
