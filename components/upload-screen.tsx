@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { Link2, AlertCircle, ChevronDown, ChevronUp, Upload, FileAudio, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import GdriveGuideModal, { isGdriveUrl, isGdriveGuideDismissed } from '@/components/gdrive-guide-modal';
+import { createClient } from '@/lib/supabase/client';
 
 interface UploadScreenProps {
   onSubmit: (url: string) => void;
@@ -119,31 +120,42 @@ export default function UploadScreen({ onSubmit, error }: UploadScreenProps) {
     setUploadProgress(`Uploading ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)...`);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      // Upload directly from browser to Supabase Storage.
+      // This completely bypasses Vercel's 4.5MB body limit.
+      // The raw audio bytes go: Browser → Supabase CDN (no re-encoding, no quality loss).
+      const supabase = createClient();
+      const timestamp = Date.now();
+      const randomSuffix = Math.random().toString(36).slice(2, 8);
+      const safeName = file.name.replace(/[^a-zA-Z0-9._\-\u3000-\u9FFF\uF900-\uFAFF]/g, '_');
+      const path = `uploads/${timestamp}-${randomSuffix}/${safeName}`;
 
-      const resp = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
+      const { error: uploadError } = await supabase.storage
+        .from('audio-uploads')
+        .upload(path, file, {
+          contentType: file.type || 'application/octet-stream',
+          upsert: false,
+        });
 
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: `Upload failed (${resp.status})` }));
-        throw new Error(err.error || `Upload failed: ${resp.status}`);
+      if (uploadError) {
+        throw new Error(`Storage upload failed: ${uploadError.message}`);
       }
 
-      const data = await resp.json();
+      const { data: publicUrlData } = supabase.storage
+        .from('audio-uploads')
+        .getPublicUrl(path);
+
       setUploadProgress(null);
       setIsUploading(false);
 
-      // Immediately submit the GCS URL to the pipeline
-      onSubmit(data.url);
+      // Submit the public Supabase Storage URL to the pipeline
+      onSubmit(publicUrlData.publicUrl);
     } catch (err) {
       setIsUploading(false);
       setUploadProgress(null);
       setValidationError(err instanceof Error ? err.message : 'Upload failed');
     }
   }, [validateFile, onSubmit]);
+
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
