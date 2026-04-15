@@ -105,12 +105,12 @@ export default function AnalyzingScreen({ error }: { error?: string | null }) {
   const currentPhase = ALL_STEPS[currentStep]?.phase ?? 'FINALIZE';
   const progress = ((currentStep + 1) / ALL_STEPS.length) * 100;
 
-  // Frequency bins for spectrum visualization - initialize empty for SSR to prevent hydration mismatch
-  const [spectrumBars, setSpectrumBars] = useState<number[]>([]);
-
-  useEffect(() => {
-    setSpectrumBars(Array.from({ length: 32 }, () => 4 + Math.random() * 20));
-  }, []);
+  // Frequency bins for spectrum visualization - use lazy initializer to prevent hydration mismatch
+  const [spectrumBars] = useState<number[]>(() =>
+    typeof window !== 'undefined'
+      ? Array.from({ length: 32 }, () => 4 + Math.random() * 20)
+      : []
+  );
 
   return (
     <div className="w-full max-w-lg flex flex-col items-center justify-center">

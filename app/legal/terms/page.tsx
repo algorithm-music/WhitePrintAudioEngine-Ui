@@ -14,7 +14,7 @@ export default function TermsPage() {
         <p className="text-zinc-400">Last updated: April 11, 2026</p>
 
         <h2>1. Acceptance of Terms</h2>
-        <p>By accessing or using WhitePrint AudioEngine ("Service"), you agree to be bound by these Terms of Service.</p>
+        <p>By accessing or using WhitePrint AudioEngine (&ldquo;Service&rdquo;), you agree to be bound by these Terms of Service.</p>
 
         <h2>2. Description of Service</h2>
         <p>WhitePrint provides AI-powered audio analysis and mastering via web interface and API. The Service processes audio files submitted by users and returns analysis data and/or mastered audio files.</p>
@@ -35,7 +35,7 @@ export default function TermsPage() {
         <p>Paid plans are billed monthly or annually. Refunds are available within 14 days of purchase if no API calls have been made.</p>
 
         <h2>8. Limitation of Liability</h2>
-        <p>The Service is provided "as is." WhitePrint shall not be liable for any indirect, incidental, or consequential damages.</p>
+        <p>The Service is provided &ldquo;as is.&rdquo; WhitePrint shall not be liable for any indirect, incidental, or consequential damages.</p>
 
         <h2>9. Changes to Terms</h2>
         <p>We may update these terms from time to time. Continued use of the Service after changes constitutes acceptance.</p>
