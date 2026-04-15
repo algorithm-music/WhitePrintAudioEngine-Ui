@@ -5,6 +5,7 @@ const sidebarLinks = [
   { href: '/developers/docs/quickstart', label: 'Quickstart' },
   { href: '/developers/docs/reference', label: 'API Reference' },
   { href: '/developers/docs/examples', label: 'Code Examples' },
+  { href: '/developers/docs/specification', label: 'Technical Specification' },
 ];
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {

@@ -14,6 +14,7 @@ const footerLinks = {
     { href: '/developers/docs/quickstart', label: 'Quickstart' },
     { href: '/developers/docs/reference', label: 'API Reference' },
     { href: '/developers/docs/examples', label: 'Examples' },
+    { href: '/developers/docs/specification', label: 'Specification' },
   ],
   Company: [
     { href: '/about', label: 'About' },
