@@ -8,9 +8,10 @@ import ABPlayer from './ab-player';
 interface MasteringDashboardProps {
   data: MasteringResult;
   audioUrl: string | null;
+  audioFile?: File | null;
 }
 
-export default function MasteringDashboard({ data, audioUrl }: MasteringDashboardProps) {
+export default function MasteringDashboard({ data, audioUrl, audioFile }: MasteringDashboardProps) {
   if (!data) return null;
   const metrics = data?.metrics ?? {} as any;
 
@@ -76,7 +77,7 @@ export default function MasteringDashboard({ data, audioUrl }: MasteringDashboar
         </div>
 
         {/* High-Fidelity A/B Player */}
-        <ABPlayer audioUrl={audioUrl} masteredUrl={data.download_url} />
+        <ABPlayer audioUrl={audioUrl} masteredUrl={data.download_url} audioFile={audioFile} />
       </motion.div>
     </div>
   );

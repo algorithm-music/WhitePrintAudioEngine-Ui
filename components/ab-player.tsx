@@ -1,14 +1,26 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Play, Pause, Volume2, SkipBack, SkipForward, AlertCircle } from 'lucide-react';
 
 interface ABPlayerProps {
   audioUrl: string | null;
   masteredUrl: string | null;
+  audioFile?: File | null;
 }
 
-export default function ABPlayer({ audioUrl, masteredUrl }: ABPlayerProps) {
+export default function ABPlayer({ audioUrl, masteredUrl, audioFile }: ABPlayerProps) {
+  // For local file uploads, create a stable object URL. Revoke on cleanup.
+  const fileObjectUrl = useMemo(() => {
+    if (audioFile) return URL.createObjectURL(audioFile);
+    return null;
+  }, [audioFile]);
+
+  useEffect(() => {
+    return () => { if (fileObjectUrl) URL.revokeObjectURL(fileObjectUrl); };
+  }, [fileObjectUrl]);
+
+  const effectiveAudioUrl = audioUrl || fileObjectUrl;
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeTrack, setActiveTrack] = useState<'before' | 'after'>('after');
   const [progress, setProgress] = useState(0);
@@ -23,13 +35,15 @@ export default function ABPlayer({ audioUrl, masteredUrl }: ABPlayerProps) {
   const activeRef = activeTrack === 'before' ? beforeRef : afterRef;
   const inactiveRef = activeTrack === 'before' ? afterRef : beforeRef;
 
-  // Initialize Before audio (original — may fail due to CORS on external URLs)
+  // Initialize Before audio (original)
+  // For local files, effectiveAudioUrl is an object URL (no CORS issues)
   useEffect(() => {
-    if (!audioUrl) return;
+    if (!effectiveAudioUrl) return;
     const audio = new Audio();
-    audio.crossOrigin = 'anonymous';
+    // Only set crossOrigin for remote URLs (object URLs don't need it)
+    if (audioUrl) audio.crossOrigin = 'anonymous';
     audio.preload = 'metadata';
-    audio.src = audioUrl;
+    audio.src = effectiveAudioUrl;
     beforeRef.current = audio;
 
     const onReady = () => setBeforeReady(true);
@@ -43,7 +57,7 @@ export default function ABPlayer({ audioUrl, masteredUrl }: ABPlayerProps) {
       audio.pause();
       audio.src = '';
     };
-  }, [audioUrl]);
+  }, [effectiveAudioUrl, audioUrl]);
 
   // Initialize After audio (mastered blob URL — always local, always works)
   useEffect(() => {
