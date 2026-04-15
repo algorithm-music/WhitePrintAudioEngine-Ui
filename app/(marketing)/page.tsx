@@ -11,9 +11,9 @@ import DeliberationDashboard from '@/components/deliberation-dashboard';
 import MasteringScreen from '@/components/mastering-screen';
 import MasteringDashboard from '@/components/mastering-dashboard';
 import SiteHeader from '@/components/site-header';
-import { analyzeAudio } from '@/lib/audio-analysis';
-import { runDeliberation } from '@/lib/deliberation';
-import { runMastering } from '@/lib/mastering';
+import { analyzeAudio, analyzeAudioFile } from '@/lib/audio-analysis';
+import { runDeliberation, runDeliberationFile } from '@/lib/deliberation';
+import { runMastering, runMasteringFile } from '@/lib/mastering';
 import { createClient } from '@/lib/supabase/client';
 import type { AnalysisResult } from '@/types/audio';
 import type { DeliberationOutput } from '@/types/deliberation';
@@ -26,6 +26,7 @@ function AppDashboardInner() {
   const [deliberationResult, setDeliberationResult] = useState<DeliberationOutput | null>(null);
   const [masteringResult, setMasteringResult] = useState<MasteringResult | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const autoStarted = useRef(false);
@@ -70,6 +71,7 @@ function AppDashboardInner() {
     setAppState('analyzing');
     setError(null);
     setAudioUrl(parsedUrl);
+    setAudioFile(null);
     const jid = await createJob(parsedUrl);
     setJobId(jid);
     try {
@@ -95,6 +97,22 @@ function AppDashboardInner() {
     }
   };
 
+  const handleFileSubmit = async (file: File) => {
+    setAppState('analyzing');
+    setError(null);
+    setAudioFile(file);
+    setAudioUrl(null);
+    try {
+      const result = await analyzeAudioFile(file);
+      setAnalysisResult(result);
+      setAppState('results');
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : 'Unknown error occurred during analysis.');
+      setAppState('idle');
+    }
+  };
+
   // Auto-start analysis if URL is passed via query param (from LP hero)
   useEffect(() => {
     const urlParam = searchParams.get('url');
@@ -111,15 +129,18 @@ function AppDashboardInner() {
     setDeliberationResult(null);
     setMasteringResult(null);
     setAudioUrl(null);
+    setAudioFile(null);
     setError(null);
   };
 
   const handleRunDeliberation = async (targetLufs: number = -14.0, targetTruePeak: number = -1.0) => {
-    if (!analysisResult || !audioUrl) return;
+    if (!analysisResult) return;
     setAppState('deliberating');
     setError(null);
     try {
-      const result = await runDeliberation(audioUrl, targetLufs, targetTruePeak);
+      const result = audioFile
+        ? await runDeliberationFile(audioFile, targetLufs, targetTruePeak)
+        : await runDeliberation(audioUrl!, targetLufs, targetTruePeak);
       setDeliberationResult(result);
       setAppState('deliberation_results');
     } catch (err) {
@@ -130,12 +151,14 @@ function AppDashboardInner() {
   };
 
   const handleRunMastering = async () => {
-    if (!deliberationResult || !audioUrl) return;
+    if (!deliberationResult) return;
     setAppState('mastering');
     setError(null);
     await updateJob(jobId, { status: 'processing', route: 'dsp_only' });
     try {
-      const result = await runMastering(audioUrl, deliberationResult);
+      const result = audioFile
+        ? await runMasteringFile(audioFile, deliberationResult)
+        : await runMastering(audioUrl!, deliberationResult);
       setMasteringResult(result);
       setAppState('mastering_results');
       await updateJob(jobId, {
@@ -180,7 +203,7 @@ function AppDashboardInner() {
               transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
               className="absolute inset-0 flex items-center justify-center"
             >
-              <LandingContent onSubmit={handleSubmit} error={error} />
+              <LandingContent onSubmit={handleSubmit} onFileSubmit={handleFileSubmit} error={error} />
             </motion.div>
           )}
 
@@ -193,7 +216,7 @@ function AppDashboardInner() {
               transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
               className="absolute inset-0 flex items-center justify-center p-6"
             >
-              <AnalyzingScreen error={error} />
+              <AnalyzingScreen />
             </motion.div>
           )}
 
@@ -218,7 +241,7 @@ function AppDashboardInner() {
               transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
               className="absolute inset-0 flex items-center justify-center p-6"
             >
-              <DeliberatingScreen error={error} />
+              <DeliberatingScreen />
             </motion.div>
           )}
 
@@ -243,7 +266,7 @@ function AppDashboardInner() {
               transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
               className="absolute inset-0 flex items-center justify-center p-6"
             >
-              <MasteringScreen error={error} />
+              <MasteringScreen />
             </motion.div>
           )}
 

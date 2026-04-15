@@ -1,6 +1,6 @@
 import type { DeliberationOutput } from '@/types/deliberation';
 import type { MasteringResult } from '@/types/mastering';
-import { postMasterBinary } from '@/lib/api-client';
+import { postMasterBinary, postMasterUploadBinary } from '@/lib/api-client';
 
 export async function runMastering(
   audioUrl: string,
@@ -14,6 +14,28 @@ export async function runMastering(
     target_true_peak: deliberation.target_true_peak,
   });
 
+  return buildMasteringResult(blob, headers, deliberation);
+}
+
+export async function runMasteringFile(
+  file: File,
+  deliberation: DeliberationOutput,
+): Promise<MasteringResult> {
+  const { blob, headers } = await postMasterUploadBinary(file, {
+    route: 'dsp_only',
+    manual_params: JSON.stringify(deliberation.adopted_params),
+    target_lufs: deliberation.target_lufs.toString(),
+    target_true_peak: deliberation.target_true_peak.toString(),
+  });
+
+  return buildMasteringResult(blob, headers, deliberation);
+}
+
+function buildMasteringResult(
+  blob: Blob,
+  headers: Record<string, string>,
+  deliberation: DeliberationOutput,
+): MasteringResult {
   const downloadUrl = URL.createObjectURL(blob);
 
   let metrics: MasteringResult['metrics'] = {
