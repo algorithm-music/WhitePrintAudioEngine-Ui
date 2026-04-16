@@ -4,10 +4,14 @@ import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { HelpCircle, Upload, FileAudio, Loader2 } from 'lucide-react';
 import GDriveGuide from '@/components/gdrive-guide';
-import { createClient } from '@/lib/supabase/client';
 
 const ACCEPTED_EXTENSIONS = '.wav,.flac,.aiff,.aif,.mp3';
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
+
+// Concertmaster Cloud Run — no body size limit (Vercel has 4.5MB limit)
+const CONCERTMASTER_UPLOAD_URL =
+  process.env.NEXT_PUBLIC_CONCERTMASTER_URL ||
+  'https://whiteprintaudioengine-concertmaster-pdw36wmy5q-an.a.run.app';
 
 export default function HeroUrlInput({ onSubmit }: { onSubmit?: (url: string) => void }) {
   const [url, setUrl] = useState('');
@@ -39,27 +43,29 @@ export default function HeroUrlInput({ onSubmit }: { onSubmit?: (url: string) =>
     setUploadMsg(`Uploading ${file.name}...`);
 
     try {
-      // Direct browser → Supabase Storage upload (bypasses Vercel 4.5MB limit)
-      const supabase = createClient();
-      const timestamp = Date.now();
-      const randomSuffix = Math.random().toString(36).slice(2, 8);
-      const safeName = file.name.replace(/[^a-zA-Z0-9._\-\u3000-\u9FFF\uF900-\uFAFF]/g, '_');
-      const path = `uploads/${timestamp}-${randomSuffix}/${safeName}`;
+      // Direct browser → Concertmaster (Cloud Run) → GCS
+      // Bypasses Vercel 4.5MB serverless function limit
+      const formData = new FormData();
+      formData.append('file', file);
 
-      const { error: uploadError } = await supabase.storage
-        .from('audio-uploads')
-        .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+      const resp = await fetch(`${CONCERTMASTER_UPLOAD_URL}/api/v1/upload`, {
+        method: 'POST',
+        body: formData,
+      });
 
-      if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({ detail: resp.statusText }));
+        throw new Error(errBody.detail || `Upload failed (${resp.status})`);
+      }
 
-      const { data: publicUrlData } = supabase.storage.from('audio-uploads').getPublicUrl(path);
+      const result = await resp.json();
       setIsUploading(false);
       setUploadMsg(null);
 
       if (onSubmit) {
-        onSubmit(publicUrlData.publicUrl);
+        onSubmit(result.url);
       } else {
-        router.push(`/?url=${encodeURIComponent(publicUrlData.publicUrl)}`);
+        router.push(`/?url=${encodeURIComponent(result.url)}`);
       }
     } catch (err) {
       setIsUploading(false);

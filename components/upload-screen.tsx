@@ -4,7 +4,11 @@ import { useState, useCallback, useRef } from 'react';
 import { Link2, AlertCircle, ChevronDown, ChevronUp, Upload, FileAudio, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import GdriveGuideModal, { isGdriveUrl, isGdriveGuideDismissed } from '@/components/gdrive-guide-modal';
-import { createClient } from '@/lib/supabase/client';
+
+// Concertmaster Cloud Run — no body size limit (Vercel has 4.5MB limit)
+const CONCERTMASTER_UPLOAD_URL =
+  process.env.NEXT_PUBLIC_CONCERTMASTER_URL ||
+  'https://whiteprintaudioengine-concertmaster-pdw36wmy5q-an.a.run.app';
 
 interface UploadScreenProps {
   onSubmit: (url: string) => void;
@@ -120,35 +124,29 @@ export default function UploadScreen({ onSubmit, error }: UploadScreenProps) {
     setUploadProgress(`Uploading ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)...`);
 
     try {
-      // Upload directly from browser to Supabase Storage.
-      // This completely bypasses Vercel's 4.5MB body limit.
-      // The raw audio bytes go: Browser → Supabase CDN (no re-encoding, no quality loss).
-      const supabase = createClient();
-      const timestamp = Date.now();
-      const randomSuffix = Math.random().toString(36).slice(2, 8);
-      const safeName = file.name.replace(/[^a-zA-Z0-9._\-\u3000-\u9FFF\uF900-\uFAFF]/g, '_');
-      const path = `uploads/${timestamp}-${randomSuffix}/${safeName}`;
+      // Direct browser → Concertmaster (Cloud Run) → GCS source bucket.
+      // Bypasses Vercel 4.5MB serverless function limit.
+      // Raw audio bytes: Browser → Cloud Run → GCS (no re-encoding, no quality loss).
+      const formData = new FormData();
+      formData.append('file', file);
 
-      const { error: uploadError } = await supabase.storage
-        .from('audio-uploads')
-        .upload(path, file, {
-          contentType: file.type || 'application/octet-stream',
-          upsert: false,
-        });
+      const resp = await fetch(`${CONCERTMASTER_UPLOAD_URL}/api/v1/upload`, {
+        method: 'POST',
+        body: formData,
+      });
 
-      if (uploadError) {
-        throw new Error(`Storage upload failed: ${uploadError.message}`);
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({ detail: resp.statusText }));
+        throw new Error(errBody.detail || `Upload failed (${resp.status})`);
       }
 
-      const { data: publicUrlData } = supabase.storage
-        .from('audio-uploads')
-        .getPublicUrl(path);
+      const result = await resp.json();
 
       setUploadProgress(null);
       setIsUploading(false);
 
-      // Submit the public Supabase Storage URL to the pipeline
-      onSubmit(publicUrlData.publicUrl);
+      // Submit the GCS public URL to the pipeline
+      onSubmit(result.url);
     } catch (err) {
       setIsUploading(false);
       setUploadProgress(null);
