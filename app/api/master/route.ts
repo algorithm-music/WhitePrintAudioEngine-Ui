@@ -10,8 +10,8 @@ function createAdminClient() {
   );
 }
 
-const CONCERTMASTER_URL = (process.env.CONCERTMASTER_URL || 'https://whiteprintaudioengine-concertmaster-git-270124753853.asia-northeast1.run.app').replace(/\/+$/, '');
-const CONCERTMASTER_API_KEY = process.env.CONCERTMASTER_API_KEY || '';
+const CONCERTMASTER_URL = (process.env.CONCERTMASTER_URL || 'https://whiteprintaudioengine-concertmaster-git-270124753853.asia-northeast1.run.app').trim().replace(/\/+$/, '');
+const CONCERTMASTER_API_KEY = (process.env.CONCERTMASTER_API_KEY || '').trim();
 
 // Free plan limits (no billing record = free)
 const FREE_TRACKS_LIMIT = 3;
