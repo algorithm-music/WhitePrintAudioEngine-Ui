@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createBrowserClient } from '@supabase/supabase-js';
+
+// Admin client with service_role key bypasses RLS for mastered audio storage
+function createAdminClient() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 const CONCERTMASTER_URL = (process.env.CONCERTMASTER_URL || 'https://whiteprintaudioengine-concertmaster-git-270124753853.asia-northeast1.run.app').replace(/\/+$/, '');
 const CONCERTMASTER_API_KEY = process.env.CONCERTMASTER_API_KEY || '';
@@ -101,13 +110,15 @@ export async function POST(request: NextRequest) {
       const audioBuffer = await response.arrayBuffer();
 
       // Upload to Supabase Storage to bypass Vercel 4.5MB Payload limit
-      const supabase = await createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      // Use admin client (service_role) to bypass RLS for server-side writes
+      const adminSupabase = createAdminClient();
+      const authSupabase = await createClient();
+      const { data: { user } } = await authSupabase.auth.getUser();
 
       // Ensure the audio uses a valid unique filename
       const fileName = `${user ? user.id : 'guest'}/${Date.now()}-master.wav`;
       
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await adminSupabase.storage
         .from('audio-uploads')
         .upload(fileName, audioBuffer, {
           contentType: 'audio/wav',
@@ -119,7 +130,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to save mastered audio to storage' }, { status: 500 });
       }
 
-      const { data: publicUrlData } = supabase.storage.from('audio-uploads').getPublicUrl(fileName);
+      const { data: publicUrlData } = adminSupabase.storage.from('audio-uploads').getPublicUrl(fileName);
 
       // Increment usage for successful mastering
       if (isMasteringRoute) {
