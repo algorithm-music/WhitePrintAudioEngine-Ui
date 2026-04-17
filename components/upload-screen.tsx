@@ -10,18 +10,35 @@ const CONCERTMASTER_UPLOAD_URL =
   process.env.NEXT_PUBLIC_CONCERTMASTER_URL ||
   'https://whiteprintaudioengine-concertmaster-pdw36wmy5q-an.a.run.app';
 
+// Guard: if the upload URL somehow points at our own Vercel origin we would hit
+// the 4.5 MB body limit and get a 413. Detect that at call-time and refuse
+// rather than silently fail after the user has uploaded a 200 MB file.
+function assertExternalUploadOrigin(targetUrl: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const target = new URL(targetUrl);
+    if (target.origin === window.location.origin) {
+      throw new Error(
+        'Upload misconfigured: NEXT_PUBLIC_CONCERTMASTER_URL must point to the Cloud Run backend, not this Vercel origin. (Vercel body limit is 4.5 MB — uploads >4.5 MB will 413.)',
+      );
+    }
+  } catch {
+    // URL() throws on bad input — let the caller fail on the fetch step
+  }
+}
+
 interface UploadScreenProps {
   onSubmit: (url: string) => void;
   error: string | null;
 }
 
 const PROVIDER_HINTS = [
-  { name: 'File Upload', hint: 'Drop or select WAV, FLAC, AIFF, or MP3 — auto-uploaded to secure cloud storage' },
-  { name: 'Suno', hint: 'Paste the song page URL — we auto-extract the audio' },
-  { name: 'SoundCloud', hint: 'Paste the track page URL — we auto-extract the stream' },
-  { name: 'Google Drive', hint: 'Share → Anyone with the link → Copy link' },
+  { name: 'Google Drive', hint: 'Recommended for large files. Share → "Anyone with the link" (Viewer) → Copy link' },
   { name: 'Dropbox', hint: 'Share → Copy link (auto-converted to direct download)' },
   { name: 'Direct URL', hint: 'Any HTTPS link to WAV, FLAC, AIFF, or MP3' },
+  { name: 'Suno', hint: 'Paste the song page URL — we auto-extract the audio' },
+  { name: 'SoundCloud', hint: 'Paste the track page URL — we auto-extract the stream' },
+  { name: 'File Upload', hint: 'Drop or select WAV, FLAC, AIFF, or MP3 — up to 200MB' },
 ];
 
 const ACCEPTED_EXTENSIONS = ['.wav', '.flac', '.aiff', '.aif', '.mp3'];
@@ -45,7 +62,9 @@ function isValidAudioUrl(url: string): boolean {
 }
 
 export default function UploadScreen({ onSubmit, error }: UploadScreenProps) {
-  const [mode, setMode] = useState<InputMode>('file');
+  // Default to URL mode: large audio files bypass the Vercel 4.5MB body limit
+  // when users paste a Google Drive / Dropbox / direct HTTPS link.
+  const [mode, setMode] = useState<InputMode>('url');
   const [url, setUrl] = useState('');
   const [showHints, setShowHints] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -127,10 +146,13 @@ export default function UploadScreen({ onSubmit, error }: UploadScreenProps) {
       // Direct browser → Concertmaster (Cloud Run) → GCS source bucket.
       // Bypasses Vercel 4.5MB serverless function limit.
       // Raw audio bytes: Browser → Cloud Run → GCS (no re-encoding, no quality loss).
+      const uploadEndpoint = `${CONCERTMASTER_UPLOAD_URL}/api/v1/upload`;
+      assertExternalUploadOrigin(uploadEndpoint);
+
       const formData = new FormData();
       formData.append('file', file);
 
-      const resp = await fetch(`${CONCERTMASTER_UPLOAD_URL}/api/v1/upload`, {
+      const resp = await fetch(uploadEndpoint, {
         method: 'POST',
         body: formData,
       });

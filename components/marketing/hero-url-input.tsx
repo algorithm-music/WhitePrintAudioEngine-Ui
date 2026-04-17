@@ -13,6 +13,22 @@ const CONCERTMASTER_UPLOAD_URL =
   process.env.NEXT_PUBLIC_CONCERTMASTER_URL ||
   'https://whiteprintaudioengine-concertmaster-pdw36wmy5q-an.a.run.app';
 
+// Guard: refuse to upload to our own Vercel origin (would hit 4.5 MB body
+// limit → 413 Content Too Large). Fail fast with a clear message.
+function assertExternalUploadOrigin(targetUrl: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const target = new URL(targetUrl);
+    if (target.origin === window.location.origin) {
+      throw new Error(
+        'Upload misconfigured: NEXT_PUBLIC_CONCERTMASTER_URL must point to the Cloud Run backend, not this Vercel origin.',
+      );
+    }
+  } catch {
+    // URL() throws on bad input — let the caller fail on the fetch step
+  }
+}
+
 export default function HeroUrlInput({ onSubmit }: { onSubmit?: (url: string) => void }) {
   const [url, setUrl] = useState('');
   const [showGuide, setShowGuide] = useState(false);
@@ -45,10 +61,13 @@ export default function HeroUrlInput({ onSubmit }: { onSubmit?: (url: string) =>
     try {
       // Direct browser → Concertmaster (Cloud Run) → GCS
       // Bypasses Vercel 4.5MB serverless function limit
+      const uploadEndpoint = `${CONCERTMASTER_UPLOAD_URL}/api/v1/upload`;
+      assertExternalUploadOrigin(uploadEndpoint);
+
       const formData = new FormData();
       formData.append('file', file);
 
-      const resp = await fetch(`${CONCERTMASTER_UPLOAD_URL}/api/v1/upload`, {
+      const resp = await fetch(uploadEndpoint, {
         method: 'POST',
         body: formData,
       });

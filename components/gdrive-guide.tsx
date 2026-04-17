@@ -10,14 +10,14 @@ export default function GDriveGuide({ onClose }: { onClose: () => void }) {
     {
       num: '01',
       title: 'Google Driveにアップロード',
-      desc: 'WAV / FLAC / AIFF ファイルをGoogle Driveにアップロード',
-      note: 'MP3は非対応。マスタリング品質のためWAV推奨。',
+      desc: 'WAV / FLAC / AIFF / MP3 ファイルをGoogle Driveにアップロード',
+      note: 'マスタリング品質のためWAV / FLACを推奨。最大200MB。',
     },
     {
       num: '02',
       title: '共有設定を変更',
-      desc: 'ファイルを右クリック →「共有」→「リンクを知っている全員」に変更',
-      note: '「閲覧者」で十分。「編集者」である必要はありません。',
+      desc: 'ファイルを右クリック →「共有」→ 一般的なアクセス →「リンクを知っている全員」',
+      note: 'ロールは「閲覧者」でOK。オーナーは「閲覧者と閲覧者(コメント可)にダウンロード…を表示する」をONのままにしてください。',
     },
     {
       num: '03',
@@ -29,7 +29,7 @@ export default function GDriveGuide({ onClose }: { onClose: () => void }) {
       num: '04',
       title: 'WhitePrintに貼り付け',
       desc: 'コピーしたリンクをURL入力欄に貼り付けて「Master Now」',
-      note: 'URLは自動で直接DL形式に変換されます。',
+      note: 'サーバー側が Google Drive API v3 (files.get?alt=media) で直接取得します。',
     },
   ];
 
@@ -75,7 +75,8 @@ export default function GDriveGuide({ onClose }: { onClose: () => void }) {
             <h4 className="text-[10px] font-mono uppercase tracking-wider text-red-400/70">Troubleshooting</h4>
             <ul className="space-y-1.5 text-xs text-zinc-500">
               <li>• 「共有」設定が「制限付き」のままだとエラーになります</li>
-              <li>• ファイルが25MBを超えるとGoogleのウイルススキャン確認が出ますが、正常に処理されます</li>
+              <li>• 100MB超のファイルはGoogleが表示するブラウザ用ウイルススキャン警告を回避するため、当サービスはDrive API経由で直接取得します</li>
+              <li>• 所有者が「ダウンロード、印刷、コピーを無効化」している場合は取得できません (403)</li>
               <li>• ファイル名に特殊文字があっても問題ありません</li>
               <li>• リンク形式: <code className="text-zinc-400">drive.google.com/file/d/...</code></li>
             </ul>
