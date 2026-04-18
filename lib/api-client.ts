@@ -99,47 +99,46 @@ export async function postMasterBinary(body: Record<string, unknown>): Promise<{
   );
 }
 
-// Concertmaster Cloud Run — no body size limit (Vercel has 4.5MB limit)
-const CONCERTMASTER_UPLOAD_URL =
-  (process.env.NEXT_PUBLIC_CONCERTMASTER_URL ||
-  'https://whiteprintaudioengine-concertmaster-pdw36wmy5q-an.a.run.app').trim();
+/** Helper: upload file directly to Supabase Storage */
+export async function uploadToSupabase(file: File): Promise<string> {
+  const { createClient } = await import('@/lib/supabase/client');
+  const supabase = createClient();
+  const timestamp = Date.now();
+  const randomSuffix = Math.random().toString(36).slice(2, 8);
+  
+  // Ensure the filename is completely ASCII to prevent Supabase "Invalid key" errors
+  const extension = file.name.split('.').pop() || 'wav';
+  const path = `uploads/${timestamp}-${randomSuffix}/audio.${extension}`;
 
-/** Helper: upload file to GCS via Concertmaster Cloud Run */
-async function uploadToGCS(file: File): Promise<string> {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const resp = await fetch(`${CONCERTMASTER_UPLOAD_URL}/api/v1/upload`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!resp.ok) {
-    const errBody = await resp.json().catch(() => ({ detail: resp.statusText }));
-    throw new ApiError(errBody.detail || `Upload failed (${resp.status})`, resp.status);
+  const { error: uploadError } = await supabase.storage
+    .from('audio-uploads')
+    .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
+    
+  if (uploadError) {
+    throw new ApiError(`Storage upload failed: ${uploadError.message}`, 500);
   }
 
-  const result = await resp.json();
-  return result.url;
+  const { data: publicUrlData } = supabase.storage.from('audio-uploads').getPublicUrl(path);
+  return publicUrlData.publicUrl;
 }
 
-/** Upload a file to GCS via Concertmaster, then POST the URL to /api/master */
+/** Upload a file directly to Supabase Storage, then POST the URL to /api/master */
 export async function postMasterUpload<T>(file: File, fields: Record<string, string>): Promise<T> {
-  // Step 1: Upload raw file → Concertmaster (Cloud Run) → GCS source bucket
-  const gcsUrl = await uploadToGCS(file);
+  // Step 1: Upload raw file directly from browser to Supabase Storage (Bypasses Vercel and Cloud Run size limits)
+  const supabaseUrl = await uploadToSupabase(file);
 
-  // Step 2: Pass the GCS public URL + fields to /api/master as JSON
-  return postMaster<T>({ ...fields, audio_url: gcsUrl });
+  // Step 2: Pass the public URL + fields to /api/master as JSON
+  return postMaster<T>({ ...fields, audio_url: supabaseUrl });
 }
 
-/** Upload a file to GCS via Concertmaster, then POST to /api/master expecting audio binary back */
+/** Upload a file to Supabase Storage, then POST to /api/master expecting audio binary back */
 export async function postMasterUploadBinary(file: File, fields: Record<string, string>): Promise<{
   blob: Blob;
   headers: Record<string, string>;
 }> {
-  // Step 1: Upload raw file → Concertmaster (Cloud Run) → GCS source bucket
-  const gcsUrl = await uploadToGCS(file);
+  // Step 1: Upload raw file directly from browser to Supabase Storage
+  const supabaseUrl = await uploadToSupabase(file);
 
-  // Step 2: Pass the GCS public URL + fields to /api/master
-  return postMasterBinary({ ...fields, audio_url: gcsUrl });
+  // Step 2: Pass the public URL + fields to /api/master
+  return postMasterBinary({ ...fields, audio_url: supabaseUrl });
 }

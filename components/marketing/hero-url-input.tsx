@@ -4,14 +4,10 @@ import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { HelpCircle, Upload, FileAudio, Loader2 } from 'lucide-react';
 import GDriveGuide from '@/components/gdrive-guide';
+import { uploadToSupabase } from '@/lib/api-client';
 
 const ACCEPTED_EXTENSIONS = '.wav,.flac,.aiff,.aif,.mp3';
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
-
-// Concertmaster Cloud Run — no body size limit (Vercel has 4.5MB limit)
-const CONCERTMASTER_UPLOAD_URL =
-  process.env.NEXT_PUBLIC_CONCERTMASTER_URL ||
-  'https://whiteprintaudioengine-concertmaster-pdw36wmy5q-an.a.run.app';
 
 export default function HeroUrlInput({ onSubmit }: { onSubmit?: (url: string) => void }) {
   const [url, setUrl] = useState('');
@@ -43,29 +39,17 @@ export default function HeroUrlInput({ onSubmit }: { onSubmit?: (url: string) =>
     setUploadMsg(`Uploading ${file.name}...`);
 
     try {
-      // Direct browser → Concertmaster (Cloud Run) → GCS
-      // Bypasses Vercel 4.5MB serverless function limit
-      const formData = new FormData();
-      formData.append('file', file);
+      // Direct browser → Supabase Storage. Bypasses Vercel 4.5MB limit and
+      // avoids the CORS block we get when posting to the Cloud Run origin.
+      const publicUrl = await uploadToSupabase(file);
 
-      const resp = await fetch(`${CONCERTMASTER_UPLOAD_URL}/api/v1/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!resp.ok) {
-        const errBody = await resp.json().catch(() => ({ detail: resp.statusText }));
-        throw new Error(errBody.detail || `Upload failed (${resp.status})`);
-      }
-
-      const result = await resp.json();
       setIsUploading(false);
       setUploadMsg(null);
 
       if (onSubmit) {
-        onSubmit(result.url);
+        onSubmit(publicUrl);
       } else {
-        router.push(`/?url=${encodeURIComponent(result.url)}`);
+        router.push(`/?url=${encodeURIComponent(publicUrl)}`);
       }
     } catch (err) {
       setIsUploading(false);

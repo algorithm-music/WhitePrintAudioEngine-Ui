@@ -4,11 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { Link2, AlertCircle, ChevronDown, ChevronUp, Upload, FileAudio, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import GdriveGuideModal, { isGdriveUrl, isGdriveGuideDismissed } from '@/components/gdrive-guide-modal';
-
-// Concertmaster Cloud Run — no body size limit (Vercel has 4.5MB limit)
-const CONCERTMASTER_UPLOAD_URL =
-  process.env.NEXT_PUBLIC_CONCERTMASTER_URL ||
-  'https://whiteprintaudioengine-concertmaster-pdw36wmy5q-an.a.run.app';
+import { uploadToSupabase } from '@/lib/api-client';
 
 interface UploadScreenProps {
   onSubmit: (url: string) => void;
@@ -16,12 +12,12 @@ interface UploadScreenProps {
 }
 
 const PROVIDER_HINTS = [
-  { name: 'File Upload', hint: 'Drop or select WAV, FLAC, AIFF, or MP3 — auto-uploaded to secure cloud storage' },
-  { name: 'Suno', hint: 'Paste the song page URL — we auto-extract the audio' },
-  { name: 'SoundCloud', hint: 'Paste the track page URL — we auto-extract the stream' },
-  { name: 'Google Drive', hint: 'Share → Anyone with the link → Copy link' },
+  { name: 'Google Drive', hint: 'Recommended for large files. Share → "Anyone with the link" (Viewer) → Copy link' },
   { name: 'Dropbox', hint: 'Share → Copy link (auto-converted to direct download)' },
   { name: 'Direct URL', hint: 'Any HTTPS link to WAV, FLAC, AIFF, or MP3' },
+  { name: 'Suno', hint: 'Paste the song page URL — we auto-extract the audio' },
+  { name: 'SoundCloud', hint: 'Paste the track page URL — we auto-extract the stream' },
+  { name: 'File Upload', hint: 'Drop or select WAV, FLAC, AIFF, or MP3 — up to 200MB' },
 ];
 
 const ACCEPTED_EXTENSIONS = ['.wav', '.flac', '.aiff', '.aif', '.mp3'];
@@ -45,7 +41,9 @@ function isValidAudioUrl(url: string): boolean {
 }
 
 export default function UploadScreen({ onSubmit, error }: UploadScreenProps) {
-  const [mode, setMode] = useState<InputMode>('file');
+  // Default to URL mode: large audio files bypass the Vercel 4.5MB body limit
+  // when users paste a Google Drive / Dropbox / direct HTTPS link.
+  const [mode, setMode] = useState<InputMode>('url');
   const [url, setUrl] = useState('');
   const [showHints, setShowHints] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -124,29 +122,14 @@ export default function UploadScreen({ onSubmit, error }: UploadScreenProps) {
     setUploadProgress(`Uploading ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)...`);
 
     try {
-      // Direct browser → Concertmaster (Cloud Run) → GCS source bucket.
-      // Bypasses Vercel 4.5MB serverless function limit.
-      // Raw audio bytes: Browser → Cloud Run → GCS (no re-encoding, no quality loss).
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const resp = await fetch(`${CONCERTMASTER_UPLOAD_URL}/api/v1/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!resp.ok) {
-        const errBody = await resp.json().catch(() => ({ detail: resp.statusText }));
-        throw new Error(errBody.detail || `Upload failed (${resp.status})`);
-      }
-
-      const result = await resp.json();
+      // Direct browser → Supabase Storage. Bypasses Vercel 4.5MB limit and
+      // avoids the CORS block we get when posting to the Cloud Run origin.
+      const publicUrl = await uploadToSupabase(file);
 
       setUploadProgress(null);
       setIsUploading(false);
 
-      // Submit the GCS public URL to the pipeline
-      onSubmit(result.url);
+      onSubmit(publicUrl);
     } catch (err) {
       setIsUploading(false);
       setUploadProgress(null);
