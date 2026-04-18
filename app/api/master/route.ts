@@ -72,11 +72,39 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Pre-generate a Supabase signed upload URL for mastering routes so rendition-dsp
+    // can stream the mastered WAV directly to Supabase. This bypasses the Cloud Run
+    // 32MB response body limit that otherwise turns a successful DSP into a proxy 500.
+    let outputPublicUrl: string | null = null;
+    if (isMasteringRoute) {
+      try {
+        const adminSupabase = createAdminClient();
+        const authSupabase = await createClient();
+        const { data: { user } } = await authSupabase.auth.getUser();
+        const outputPath = `${user ? user.id : 'guest'}/${Date.now()}-master.wav`;
+
+        const { data: signed, error: signErr } = await adminSupabase.storage
+          .from('audio-uploads')
+          .createSignedUploadUrl(outputPath);
+
+        if (signErr || !signed) {
+          console.error('[master] createSignedUploadUrl failed:', signErr);
+        } else {
+          body.output_url = signed.signedUrl;
+          outputPublicUrl = adminSupabase.storage
+            .from('audio-uploads')
+            .getPublicUrl(outputPath).data.publicUrl;
+        }
+      } catch (e) {
+        console.error('[master] Signed upload URL setup threw:', e);
+      }
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 600_000);
 
     const targetUrl = `${CONCERTMASTER_URL}/api/v1/jobs/master`;
-    console.log(`[master] Fetching: ${targetUrl} | Key prefix: ${CONCERTMASTER_API_KEY?.substring(0, 12)}...`);
+    console.log(`[master] Fetching: ${targetUrl} | Key prefix: ${CONCERTMASTER_API_KEY?.substring(0, 12)}... | output_url set: ${!!outputPublicUrl}`);
 
     let response: Response;
     try {
@@ -163,6 +191,18 @@ export async function POST(request: NextRequest) {
     // Increment usage for successful mastering (JSON response variant)
     if (isMasteringRoute && response.ok) {
       await incrementUsage(request);
+    }
+
+    // When we pre-signed an output_url, rendition-dsp wrote the WAV directly to
+    // Supabase and only metrics came back. Normalize to the same shape the UI
+    // would have received from the legacy audio/* path.
+    if (outputPublicUrl && response.ok) {
+      return NextResponse.json({
+        route: data.route || body.route || 'full',
+        download_url: outputPublicUrl,
+        metrics: data.dsp_metrics || data.metrics || {},
+        elapsed_ms: data.elapsed_ms,
+      });
     }
 
     return NextResponse.json(data);
