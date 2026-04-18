@@ -4,7 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { Link2, AlertCircle, ChevronDown, ChevronUp, Upload, FileAudio, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import GdriveGuideModal, { isGdriveUrl, isGdriveGuideDismissed } from '@/components/gdrive-guide-modal';
-import { uploadToSupabase } from '@/lib/api-client';
+import { uploadToGCS } from '@/lib/api-client';
 
 interface UploadScreenProps {
   onSubmit: (url: string) => void;
@@ -122,14 +122,17 @@ export default function UploadScreen({ onSubmit, error }: UploadScreenProps) {
     setUploadProgress(`Uploading ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)...`);
 
     try {
-      // Direct browser → Supabase Storage. Bypasses Vercel 4.5MB limit and
-      // avoids the CORS block we get when posting to the Cloud Run origin.
-      const publicUrl = await uploadToSupabase(file);
+      // Direct browser → GCS via V4 signed PUT URL. Bypasses Vercel body
+      // limits and puts the file on the same bucket the backend reads via
+      // its GCSFuse mount — no second hop. The returned string is a
+      // synthetic `gcs://<object>` URL that postMaster rewrites into a
+      // `gcs_object` field, so downstream code stays unchanged.
+      const gcsUrl = await uploadToGCS(file);
 
       setUploadProgress(null);
       setIsUploading(false);
 
-      onSubmit(publicUrl);
+      onSubmit(gcsUrl);
     } catch (err) {
       setIsUploading(false);
       setUploadProgress(null);

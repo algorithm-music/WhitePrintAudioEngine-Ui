@@ -7,21 +7,40 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Callers historically pass `audio_url` as a string. After the GCS migration
+ * that same field may hold a `gcs://<object-name>` synthetic URL (produced by
+ * {@link uploadToGCS}) — in which case we rewrite the request body to use
+ * `gcs_object` so the backend takes the in-bucket path.
+ */
+function normalizeInputFields(
+  body: Record<string, unknown>,
+): Record<string, unknown> {
+  const a = body.audio_url;
+  if (typeof a === 'string' && a.startsWith('gcs://')) {
+    const rest = { ...body };
+    delete rest.audio_url;
+    return { ...rest, gcs_object: a.slice('gcs://'.length) };
+  }
+  return body;
+}
+
 export async function postMaster<T>(body: Record<string, unknown>): Promise<T> {
+  const payload = normalizeInputFields(body);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 600_000);
+  const timeout = setTimeout(() => controller.abort(), 780_000);
   let res: Response;
   try {
     res = await fetch('/api/master', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
   } catch (err) {
     clearTimeout(timeout);
     if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new ApiError('Request timed out after 10 minutes. The backend may be overloaded.', 408);
+      throw new ApiError('Request timed out after 13 minutes. The backend may be overloaded.', 408);
     }
     throw err;
   }
@@ -34,7 +53,7 @@ export async function postMaster<T>(body: Record<string, unknown>): Promise<T> {
       if (err.error) message = err.error;
       else if (err.detail) message = err.detail;
     } catch {
-      // response body was not JSON
+      /* response body was not JSON */
     }
     throw new ApiError(message, res.status);
   }
@@ -42,103 +61,84 @@ export async function postMaster<T>(body: Record<string, unknown>): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export async function postMasterBinary(body: Record<string, unknown>): Promise<{
-  blob: Blob;
-  headers: Record<string, string>;
-}> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 600_000);
-  let res: Response;
-  try {
-    res = await fetch('/api/master', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } catch (err) {
-    clearTimeout(timeout);
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new ApiError('Request timed out after 10 minutes. The backend may be overloaded.', 408);
-    }
-    throw err;
-  }
-  clearTimeout(timeout);
+/**
+ * Get a V4 signed PUT URL from /api/presign-upload, then PUT the file
+ * directly to GCS. Returns a synthetic `gcs://<object-name>` URL so callers
+ * that previously plumbed a URL string (UploadScreen, HeroUrlInput, etc.)
+ * can keep passing a single string unchanged; {@link postMaster} rewrites
+ * `gcs://` into a `gcs_object` field before hitting the backend.
+ */
+export async function uploadToGCS(
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<string> {
+  const presignRes = await fetch('/api/presign-upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filename: file.name,
+      content_type: file.type || 'application/octet-stream',
+    }),
+  });
 
-  if (!res.ok) {
-    let message = `Backend error (${res.status})`;
+  if (!presignRes.ok) {
+    let message = `Presign failed (${presignRes.status})`;
     try {
-      const err = await res.json();
+      const err = await presignRes.json();
       if (err.error) message = err.error;
-      else if (err.detail) message = err.detail;
     } catch {
-      // response body was not JSON
+      /* not json */
     }
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, presignRes.status);
   }
 
-  const contentType = res.headers.get('content-type') || '';
+  const { upload_url, gcs_object, content_type } = (await presignRes.json()) as {
+    upload_url: string;
+    gcs_object: string;
+    content_type: string;
+  };
 
-  if (contentType.includes('audio/')) {
-    const blob = await res.blob();
-    return {
-      blob,
-      headers: {
-        'X-Route': res.headers.get('X-Route') || '',
-        'X-Elapsed-Ms': res.headers.get('X-Elapsed-Ms') || '',
-        'X-Metrics': res.headers.get('X-Metrics') || '',
-      },
+  // PUT straight to GCS. With V4 signed URLs, Content-Type on the PUT must
+  // match what was signed; we just echo back what the presign route used.
+  await putToGCS(upload_url, file, content_type, onProgress);
+
+  return `gcs://${gcs_object}`;
+}
+
+function putToGCS(
+  url: string,
+  file: File,
+  contentType: string,
+  onProgress?: (pct: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.setRequestHeader('Content-Type', contentType);
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress((e.loaded / e.total) * 100);
+      };
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new ApiError(`GCS upload failed (${xhr.status}): ${xhr.responseText.slice(0, 200)}`, xhr.status));
     };
-  }
-
-  // Backend returned JSON instead of audio (e.g. when output_url was provided)
-  const data = await res.json();
-  throw new ApiError(
-    data.error || 'Expected audio response but received JSON',
-    422
-  );
+    xhr.onerror = () => reject(new ApiError('GCS upload network error.', 0));
+    xhr.send(file);
+  });
 }
 
-/** Helper: upload file directly to Supabase Storage */
-export async function uploadToSupabase(file: File): Promise<string> {
-  const { createClient } = await import('@/lib/supabase/client');
-  const supabase = createClient();
-  const timestamp = Date.now();
-  const randomSuffix = Math.random().toString(36).slice(2, 8);
-  
-  // Ensure the filename is completely ASCII to prevent Supabase "Invalid key" errors
-  const extension = file.name.split('.').pop() || 'wav';
-  const path = `uploads/${timestamp}-${randomSuffix}/audio.${extension}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from('audio-uploads')
-    .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false });
-    
-  if (uploadError) {
-    throw new ApiError(`Storage upload failed: ${uploadError.message}`, 500);
-  }
-
-  const { data: publicUrlData } = supabase.storage.from('audio-uploads').getPublicUrl(path);
-  return publicUrlData.publicUrl;
-}
-
-/** Upload a file directly to Supabase Storage, then POST the URL to /api/master */
-export async function postMasterUpload<T>(file: File, fields: Record<string, string>): Promise<T> {
-  // Step 1: Upload raw file directly from browser to Supabase Storage (Bypasses Vercel and Cloud Run size limits)
-  const supabaseUrl = await uploadToSupabase(file);
-
-  // Step 2: Pass the public URL + fields to /api/master as JSON
-  return postMaster<T>({ ...fields, audio_url: supabaseUrl });
-}
-
-/** Upload a file to Supabase Storage, then POST to /api/master expecting audio binary back */
-export async function postMasterUploadBinary(file: File, fields: Record<string, string>): Promise<{
-  blob: Blob;
-  headers: Record<string, string>;
-}> {
-  // Step 1: Upload raw file directly from browser to Supabase Storage
-  const supabaseUrl = await uploadToSupabase(file);
-
-  // Step 2: Pass the public URL + fields to /api/master
-  return postMasterBinary({ ...fields, audio_url: supabaseUrl });
+/**
+ * Upload a browser-provided file to GCS, then POST the object name to
+ * /api/master. The backend reads from the shared GCSFuse mount, never
+ * through HTTP, so there are no response-size or timeout surprises.
+ */
+export async function postMasterUpload<T>(
+  file: File,
+  fields: Record<string, string>,
+  onUploadProgress?: (pct: number) => void,
+): Promise<T> {
+  const audioUrl = await uploadToGCS(file, onUploadProgress);
+  return postMaster<T>({ ...fields, audio_url: audioUrl });
 }
