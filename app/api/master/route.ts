@@ -1,110 +1,149 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { createClient as createBrowserClient } from '@supabase/supabase-js';
+import {
+  generateDownloadUrl,
+  makeObjectName,
+  objectToFusePath,
+} from '@/lib/gcs';
 
-// Admin client with service_role key bypasses RLS for mastered audio storage
-function createAdminClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
-}
-
-const CONCERTMASTER_URL = (process.env.CONCERTMASTER_URL || 'https://whiteprintaudioengine-concertmaster-git-270124753853.asia-northeast1.run.app').trim().replace(/\/+$/, '');
+const CONCERTMASTER_URL = (
+  process.env.CONCERTMASTER_URL ||
+  'https://whiteprintaudioengine-concertmaster-270124753853.asia-northeast1.run.app'
+)
+  .trim()
+  .replace(/\/+$/, '');
 const CONCERTMASTER_API_KEY = (process.env.CONCERTMASTER_API_KEY || '').trim();
 
-// Free plan limits (no billing record = free)
 const FREE_TRACKS_LIMIT = 3;
 
-export const maxDuration = 600; // 10 minutes max duration for Vercel Pro
+export const maxDuration = 800;
 export const dynamic = 'force-dynamic';
 
+/**
+ * POST /api/master
+ *   body: {
+ *     // input (choose one):
+ *     gcs_object?: string,                      // preferred — object under GCS_BUCKET uploaded via /api/presign-upload
+ *     audio_url?:  string,                      // legacy — HTTPS URL (GDrive etc.)
+ *     route?:      'full' | 'analyze_only' | 'deliberation_only' | 'dsp_only',
+ *     target_lufs?: number,
+ *     target_true_peak?: number,
+ *     sage_config?: object,
+ *     dsp_config?:  object,
+ *     manual_params?: object,
+ *   }
+ *
+ * The mastered WAV is never transferred through Vercel. rendition-dsp writes
+ * the output directly to the GCSFuse-mounted bucket; this route then signs a
+ * V4 GET URL for the browser to download.
+ */
 export async function POST(request: NextRequest) {
   if (!CONCERTMASTER_API_KEY) {
     return NextResponse.json(
       { error: 'Server misconfiguration: CONCERTMASTER_API_KEY is not set.' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
   try {
     const body = await request.json();
-    const route = body.route as string | undefined;
+    const route: string = (body.route as string) || 'full';
+    const isMasteringRoute =
+      route === 'full' || route === 'dsp_only' || !body.route;
 
-    // Check usage limits for mastering routes (dsp_only and full)
-    // Analysis and deliberation are free/unlimited
-    const isMasteringRoute = !route || route === 'dsp_only' || route === 'full';
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    // Usage check — wrapped in try-catch so billing failures never block mastering
-    if (isMasteringRoute) {
+    // Billing gate (mastering routes only)
+    if (isMasteringRoute && user) {
       try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: billing } = await supabase
+          .from('billing')
+          .select('plan, tracks_used, tracks_limit, period_end')
+          .eq('user_id', user.id)
+          .single();
 
-        if (user) {
-          const { data: billing } = await supabase
-            .from('billing')
-            .select('plan, tracks_used, tracks_limit, period_end')
-            .eq('user_id', user.id)
-            .single();
+        const tracksLimit = billing?.tracks_limit ?? FREE_TRACKS_LIMIT;
+        const tracksUsed = billing?.tracks_used ?? 0;
 
-          const tracksLimit = billing?.tracks_limit ?? FREE_TRACKS_LIMIT;
-          const tracksUsed = billing?.tracks_used ?? 0;
-
-          if (billing?.period_end && new Date(billing.period_end) < new Date()) {
-            if (tracksUsed >= FREE_TRACKS_LIMIT) {
-              return NextResponse.json(
-                { error: 'Your subscription has expired. Please renew to continue mastering.' },
-                { status: 402 },
-              );
-            }
-          } else if (tracksUsed >= tracksLimit) {
-            return NextResponse.json(
-              { error: `Monthly mastering limit reached (${tracksUsed}/${tracksLimit}). Upgrade your plan for more.` },
-              { status: 429 },
-            );
-          }
+        if (
+          billing?.period_end &&
+          new Date(billing.period_end) < new Date() &&
+          tracksUsed >= FREE_TRACKS_LIMIT
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                'Your subscription has expired. Please renew to continue mastering.',
+            },
+            { status: 402 },
+          );
         }
-        // Guest users pass through — no limit enforcement for MVP
+        if (tracksUsed >= tracksLimit) {
+          return NextResponse.json(
+            {
+              error: `Monthly mastering limit reached (${tracksUsed}/${tracksLimit}). Upgrade your plan for more.`,
+            },
+            { status: 429 },
+          );
+        }
       } catch (err) {
-        // Billing check failed (e.g. Supabase unreachable) — allow request to proceed
         console.error('Usage check failed, allowing request:', err);
       }
     }
 
-    // Pre-generate a Supabase signed upload URL for mastering routes so rendition-dsp
-    // can stream the mastered WAV directly to Supabase. This bypasses the Cloud Run
-    // 32MB response body limit that otherwise turns a successful DSP into a proxy 500.
-    let outputPublicUrl: string | null = null;
+    // Resolve input: prefer gcs_object (direct-to-bucket upload).
+    const gcsObject: string | undefined =
+      typeof body.gcs_object === 'string' ? body.gcs_object : undefined;
+    const audioUrl: string | undefined =
+      typeof body.audio_url === 'string' ? body.audio_url : undefined;
+
+    if (!gcsObject && !audioUrl) {
+      return NextResponse.json(
+        { error: 'Either gcs_object (preferred) or audio_url is required.' },
+        { status: 400 },
+      );
+    }
+
+    // Allocate an output object in the same bucket so rendition-dsp can write
+    // it in place via its GCSFuse mount.
+    let outputObject: string | null = null;
+    let outputFusePath: string | null = null;
     if (isMasteringRoute) {
-      try {
-        const adminSupabase = createAdminClient();
-        const authSupabase = await createClient();
-        const { data: { user } } = await authSupabase.auth.getUser();
-        const outputPath = `${user ? user.id : 'guest'}/${Date.now()}-master.wav`;
+      outputObject = makeObjectName(
+        'outputs',
+        user?.id ?? null,
+        gcsObject ? gcsObject.split('/').pop() || 'master.wav' : 'master.wav',
+      );
+      outputFusePath = objectToFusePath(outputObject);
+    }
 
-        const { data: signed, error: signErr } = await adminSupabase.storage
-          .from('audio-uploads')
-          .createSignedUploadUrl(outputPath);
-
-        if (signErr || !signed) {
-          console.error('[master] createSignedUploadUrl failed:', signErr);
-        } else {
-          body.output_url = signed.signedUrl;
-          outputPublicUrl = adminSupabase.storage
-            .from('audio-uploads')
-            .getPublicUrl(outputPath).data.publicUrl;
-        }
-      } catch (e) {
-        console.error('[master] Signed upload URL setup threw:', e);
-      }
+    const cmBody: Record<string, unknown> = {
+      route,
+      target_lufs: body.target_lufs,
+      target_true_peak: body.target_true_peak,
+      sage_config: body.sage_config,
+      dsp_config: body.dsp_config,
+      manual_params: body.manual_params,
+    };
+    if (gcsObject) {
+      cmBody.input_path = objectToFusePath(gcsObject);
+    } else if (audioUrl) {
+      cmBody.audio_url = audioUrl;
+    }
+    if (outputFusePath) {
+      cmBody.output_path = outputFusePath;
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 600_000);
+    const timeout = setTimeout(() => controller.abort(), 780_000);
 
     const targetUrl = `${CONCERTMASTER_URL}/api/v1/jobs/master`;
-    console.log(`[master] Fetching: ${targetUrl} | Key prefix: ${CONCERTMASTER_API_KEY?.substring(0, 12)}... | output_url set: ${!!outputPublicUrl}`);
+    console.log(
+      `[master] → ${targetUrl} | gcs_object=${gcsObject ?? '(none)'} | output_object=${outputObject ?? '(none)'}`,
+    );
 
     let response: Response;
     try {
@@ -114,104 +153,95 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/json',
           'X-Api-Key': CONCERTMASTER_API_KEY,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(cmBody),
         signal: controller.signal,
       });
-      console.log(`[master] Backend responded: ${response.status} ${response.statusText} | Content-Type: ${response.headers.get('content-type')}`);
+      console.log(
+        `[master] ← ${response.status} ${response.statusText} | content-type=${response.headers.get('content-type')}`,
+      );
     } catch (err) {
       clearTimeout(timeout);
-      const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-      console.error(`[master] Fetch threw: ${errMsg} | URL: ${targetUrl}`);
+      const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      console.error(`[master] fetch threw: ${msg} | URL: ${targetUrl}`);
       if (err instanceof DOMException && err.name === 'AbortError') {
         return NextResponse.json(
-          { error: 'Backend request timed out after 10 minutes.' },
-          { status: 504 }
+          { error: 'Backend request timed out after 13 minutes.' },
+          { status: 504 },
         );
       }
-      throw err;
+      return NextResponse.json(
+        { error: `Failed to reach backend: ${msg}` },
+        { status: 502 },
+      );
     }
     clearTimeout(timeout);
 
     const contentType = response.headers.get('content-type') || '';
 
-    if (contentType.includes('audio/')) {
-      const audioBuffer = await response.arrayBuffer();
+    // Happy path: concertmaster wrote the master to the shared GCSFuse mount
+    // (because we sent output_path) and replied with JSON metrics.
+    if (contentType.includes('application/json')) {
+      const data = await response.json();
 
-      // Upload to Supabase Storage to bypass Vercel 4.5MB Payload limit
-      // Use admin client (service_role) to bypass RLS for server-side writes
-      const adminSupabase = createAdminClient();
-      const authSupabase = await createClient();
-      const { data: { user } } = await authSupabase.auth.getUser();
+      if (!response.ok) {
+        const raw = data.detail || data.error || `Backend error: ${response.status}`;
+        console.error(`[master] backend ${response.status}: ${raw}`);
+        return NextResponse.json(
+          { error: humanizeError(raw, response.status), detail: raw },
+          { status: response.status },
+        );
+      }
 
-      // Ensure the audio uses a valid unique filename
-      const fileName = `${user ? user.id : 'guest'}/${Date.now()}-master.wav`;
-      
-      const { error: uploadError } = await adminSupabase.storage
-        .from('audio-uploads')
-        .upload(fileName, audioBuffer, {
-          contentType: 'audio/wav',
-          upsert: true
+      if (isMasteringRoute && user) {
+        await incrementUsage(user.id);
+      }
+
+      if (outputObject) {
+        // Sign a V4 GET URL the browser can download from. No Vercel bytes transfer.
+        const downloadUrl = await generateDownloadUrl(outputObject, 60);
+        return NextResponse.json({
+          route: data.route || route,
+          download_url: downloadUrl,
+          metrics: data.dsp_metrics || data.metrics || {},
+          analysis: data.analysis,
+          deliberation: data.deliberation,
+          elapsed_ms: data.elapsed_ms,
         });
-
-      if (uploadError) {
-        console.error('Failed to upload mastered audio to Supabase Storage:', uploadError);
-        return NextResponse.json({ error: 'Failed to save mastered audio to storage' }, { status: 500 });
       }
 
-      const { data: publicUrlData } = adminSupabase.storage.from('audio-uploads').getPublicUrl(fileName);
-
-      // Increment usage for successful mastering
-      if (isMasteringRoute) {
-        await incrementUsage(request);
-      }
-
-      const metricsRaw = response.headers.get('X-Metrics') || '{}';
-      let parsedMetrics = {};
-      try { parsedMetrics = JSON.parse(metricsRaw); } catch { /* ignore */ }
-
-      return NextResponse.json({
-        route: response.headers.get('X-Route') || 'full',
-        download_url: publicUrlData.publicUrl,
-        metrics: parsedMetrics,
-      });
+      // Non-mastering routes (analyze_only / deliberation_only) — pass through.
+      return NextResponse.json(data);
     }
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      const raw = data.detail || data.error || `Backend error: ${response.status}`;
-      console.error(`[master] Backend ${response.status}: ${raw} | URL: ${CONCERTMASTER_URL} | Key prefix: ${CONCERTMASTER_API_KEY?.substring(0, 10)}...`);
-      const friendly = humanizeError(raw, response.status);
+    // Legacy path: concertmaster returned audio bytes (only when neither
+    // output_path nor output_url was set — shouldn't normally happen).
+    if (contentType.startsWith('audio/')) {
+      console.warn(
+        '[master] backend returned audio bytes; this path is legacy and should not fire when output_path is set.',
+      );
       return NextResponse.json(
-        { error: friendly, detail: raw },
-        { status: response.status }
+        {
+          error:
+            'Backend returned raw audio bytes, but GCS output was expected. Check that input_path / output_path wiring is in place.',
+        },
+        { status: 500 },
       );
     }
 
-    // Increment usage for successful mastering (JSON response variant)
-    if (isMasteringRoute && response.ok) {
-      await incrementUsage(request);
-    }
-
-    // When we pre-signed an output_url, rendition-dsp wrote the WAV directly to
-    // Supabase and only metrics came back. Normalize to the same shape the UI
-    // would have received from the legacy audio/* path.
-    if (outputPublicUrl && response.ok) {
-      return NextResponse.json({
-        route: data.route || body.route || 'full',
-        download_url: outputPublicUrl,
-        metrics: data.dsp_metrics || data.metrics || {},
-        elapsed_ms: data.elapsed_ms,
-      });
-    }
-
-    return NextResponse.json(data);
+    const text = await response.text();
+    console.error(
+      `[master] unexpected content-type: ${contentType} | status=${response.status} | body[:200]=${text.slice(0, 200)}`,
+    );
+    return NextResponse.json(
+      { error: `Unexpected backend response (${response.status}).`, detail: text.slice(0, 500) },
+      { status: response.status || 500 },
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown proxy error';
-    console.error(`[master] Proxy error: ${message} | URL: ${CONCERTMASTER_URL} | Key set: ${!!CONCERTMASTER_API_KEY}`);
+    console.error(`[master] proxy error: ${message}`);
     return NextResponse.json(
       { error: `Failed to reach backend: ${message}` },
-      { status: 502 }
+      { status: 502 },
     );
   }
 }
@@ -219,66 +249,51 @@ export async function POST(request: NextRequest) {
 function humanizeError(raw: string, status: number): string {
   const lower = raw.toLowerCase();
 
-  // Google Drive auth redirect → file not shared
-  if (lower.includes('accounts.google.com') || lower.includes('servicelogin') || lower.includes('interactivelogin')) {
+  if (lower.includes('accounts.google.com') || lower.includes('servicelogin')) {
     return 'Cannot access this file. Please set Google Drive sharing to "Anyone with the link can view".';
   }
-  // File too small / not audio
   if (lower.includes('too small') || lower.includes('not valid audio')) {
-    return 'The downloaded file is too small or not a valid audio file. Please check the URL points to a WAV, FLAC, or AIFF file.';
+    return 'The uploaded file is too small or not a valid audio file. Please use WAV, FLAC, or AIFF.';
   }
-  // 404 from storage provider
   if (lower.includes('404') || lower.includes('not found')) {
-    return 'File not found. The URL may be incorrect or the file has been deleted.';
+    return 'File not found. The upload may have been removed or the URL is incorrect.';
   }
-  // Timeout
   if (lower.includes('timeout') || lower.includes('timed out')) {
-    return 'The file download timed out. Try a smaller file or a faster storage provider.';
+    return 'Processing timed out. Try a shorter track.';
   }
-  // Rendition-DSP 503 (OOM / cold start)
+  if (status === 422) {
+    return 'Could not process the audio file. Use a valid WAV/FLAC/AIFF.';
+  }
   if (status === 502 && (lower.includes('503') || lower.includes('service unavailable'))) {
     return 'The mastering engine is temporarily unavailable. Please try again in 30 seconds.';
   }
-  // Downstream 422 — usually file access or format issue
-  if (status === 422 || (lower.includes('downstream') && lower.includes('422'))) {
-    return 'Could not process the audio file. Common causes:\n• Google Drive file not shared publicly ("Anyone with the link")\n• URL does not point directly to an audio file (WAV/FLAC/AIFF)\n• File is too small or corrupted';
-  }
-  // Generic downstream
-  if (lower.includes('downstream')) {
-    return `Processing failed (${status}). Please check your audio URL and try again.`;
-  }
-
   return raw;
 }
 
-async function incrementUsage(request: NextRequest) {
+async function incrementUsage(userId: string) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // Increment tracks_used in billing
     const { data: billing } = await supabase
       .from('billing')
       .select('id, tracks_used')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
 
     if (billing) {
       await supabase
         .from('billing')
-        .update({ tracks_used: (billing.tracks_used || 0) + 1, updated_at: new Date().toISOString() })
+        .update({
+          tracks_used: (billing.tracks_used || 0) + 1,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', billing.id);
     } else {
-      // Create free-tier billing record
-      await supabase
-        .from('billing')
-        .insert({
-          user_id: user.id,
-          plan: 'free',
-          tracks_used: 1,
-          tracks_limit: FREE_TRACKS_LIMIT,
-        });
+      await supabase.from('billing').insert({
+        user_id: userId,
+        plan: 'free',
+        tracks_used: 1,
+        tracks_limit: FREE_TRACKS_LIMIT,
+      });
     }
   } catch (err) {
     console.error('Failed to increment usage:', err);

@@ -4,7 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { HelpCircle, Upload, FileAudio, Loader2 } from 'lucide-react';
 import GDriveGuide from '@/components/gdrive-guide';
-import { uploadToSupabase } from '@/lib/api-client';
+import { uploadToGCS } from '@/lib/api-client';
 
 const ACCEPTED_EXTENSIONS = '.wav,.flac,.aiff,.aif,.mp3';
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
@@ -39,17 +39,19 @@ export default function HeroUrlInput({ onSubmit }: { onSubmit?: (url: string) =>
     setUploadMsg(`Uploading ${file.name}...`);
 
     try {
-      // Direct browser → Supabase Storage. Bypasses Vercel 4.5MB limit and
-      // avoids the CORS block we get when posting to the Cloud Run origin.
-      const publicUrl = await uploadToSupabase(file);
+      // Direct browser → GCS via V4 signed PUT URL. The backend picks this
+      // file up through its GCSFuse mount — no HTTP hop, no Vercel body
+      // limit. Returned string is `gcs://<object>` and postMaster rewrites
+      // it into a `gcs_object` field before the backend call.
+      const gcsUrl = await uploadToGCS(file);
 
       setIsUploading(false);
       setUploadMsg(null);
 
       if (onSubmit) {
-        onSubmit(publicUrl);
+        onSubmit(gcsUrl);
       } else {
-        router.push(`/?url=${encodeURIComponent(publicUrl)}`);
+        router.push(`/?url=${encodeURIComponent(gcsUrl)}`);
       }
     } catch (err) {
       setIsUploading(false);
