@@ -4,28 +4,7 @@ import { useState, useCallback, useRef } from 'react';
 import { Link2, AlertCircle, ChevronDown, ChevronUp, Upload, FileAudio, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import GdriveGuideModal, { isGdriveUrl, isGdriveGuideDismissed } from '@/components/gdrive-guide-modal';
-
-// Concertmaster Cloud Run — no body size limit (Vercel has 4.5MB limit)
-const CONCERTMASTER_UPLOAD_URL =
-  process.env.NEXT_PUBLIC_CONCERTMASTER_URL ||
-  'https://whiteprintaudioengine-concertmaster-pdw36wmy5q-an.a.run.app';
-
-// Guard: if the upload URL somehow points at our own Vercel origin we would hit
-// the 4.5 MB body limit and get a 413. Detect that at call-time and refuse
-// rather than silently fail after the user has uploaded a 200 MB file.
-function assertExternalUploadOrigin(targetUrl: string) {
-  if (typeof window === 'undefined') return;
-  try {
-    const target = new URL(targetUrl);
-    if (target.origin === window.location.origin) {
-      throw new Error(
-        'Upload misconfigured: NEXT_PUBLIC_CONCERTMASTER_URL must point to the Cloud Run backend, not this Vercel origin. (Vercel body limit is 4.5 MB — uploads >4.5 MB will 413.)',
-      );
-    }
-  } catch {
-    // URL() throws on bad input — let the caller fail on the fetch step
-  }
-}
+import { uploadToSupabase } from '@/lib/api-client';
 
 interface UploadScreenProps {
   onSubmit: (url: string) => void;
@@ -143,32 +122,14 @@ export default function UploadScreen({ onSubmit, error }: UploadScreenProps) {
     setUploadProgress(`Uploading ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)...`);
 
     try {
-      // Direct browser → Concertmaster (Cloud Run) → GCS source bucket.
-      // Bypasses Vercel 4.5MB serverless function limit.
-      // Raw audio bytes: Browser → Cloud Run → GCS (no re-encoding, no quality loss).
-      const uploadEndpoint = `${CONCERTMASTER_UPLOAD_URL}/api/v1/upload`;
-      assertExternalUploadOrigin(uploadEndpoint);
-
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const resp = await fetch(uploadEndpoint, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!resp.ok) {
-        const errBody = await resp.json().catch(() => ({ detail: resp.statusText }));
-        throw new Error(errBody.detail || `Upload failed (${resp.status})`);
-      }
-
-      const result = await resp.json();
+      // Direct browser → Supabase Storage. Bypasses Vercel 4.5MB limit and
+      // avoids the CORS block we get when posting to the Cloud Run origin.
+      const publicUrl = await uploadToSupabase(file);
 
       setUploadProgress(null);
       setIsUploading(false);
 
-      // Submit the GCS public URL to the pipeline
-      onSubmit(result.url);
+      onSubmit(publicUrl);
     } catch (err) {
       setIsUploading(false);
       setUploadProgress(null);

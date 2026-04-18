@@ -4,30 +4,10 @@ import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { HelpCircle, Upload, FileAudio, Loader2 } from 'lucide-react';
 import GDriveGuide from '@/components/gdrive-guide';
+import { uploadToSupabase } from '@/lib/api-client';
 
 const ACCEPTED_EXTENSIONS = '.wav,.flac,.aiff,.aif,.mp3';
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
-
-// Concertmaster Cloud Run — no body size limit (Vercel has 4.5MB limit)
-const CONCERTMASTER_UPLOAD_URL =
-  process.env.NEXT_PUBLIC_CONCERTMASTER_URL ||
-  'https://whiteprintaudioengine-concertmaster-pdw36wmy5q-an.a.run.app';
-
-// Guard: refuse to upload to our own Vercel origin (would hit 4.5 MB body
-// limit → 413 Content Too Large). Fail fast with a clear message.
-function assertExternalUploadOrigin(targetUrl: string) {
-  if (typeof window === 'undefined') return;
-  try {
-    const target = new URL(targetUrl);
-    if (target.origin === window.location.origin) {
-      throw new Error(
-        'Upload misconfigured: NEXT_PUBLIC_CONCERTMASTER_URL must point to the Cloud Run backend, not this Vercel origin.',
-      );
-    }
-  } catch {
-    // URL() throws on bad input — let the caller fail on the fetch step
-  }
-}
 
 export default function HeroUrlInput({ onSubmit }: { onSubmit?: (url: string) => void }) {
   const [url, setUrl] = useState('');
@@ -59,32 +39,17 @@ export default function HeroUrlInput({ onSubmit }: { onSubmit?: (url: string) =>
     setUploadMsg(`Uploading ${file.name}...`);
 
     try {
-      // Direct browser → Concertmaster (Cloud Run) → GCS
-      // Bypasses Vercel 4.5MB serverless function limit
-      const uploadEndpoint = `${CONCERTMASTER_UPLOAD_URL}/api/v1/upload`;
-      assertExternalUploadOrigin(uploadEndpoint);
+      // Direct browser → Supabase Storage. Bypasses Vercel 4.5MB limit and
+      // avoids the CORS block we get when posting to the Cloud Run origin.
+      const publicUrl = await uploadToSupabase(file);
 
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const resp = await fetch(uploadEndpoint, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!resp.ok) {
-        const errBody = await resp.json().catch(() => ({ detail: resp.statusText }));
-        throw new Error(errBody.detail || `Upload failed (${resp.status})`);
-      }
-
-      const result = await resp.json();
       setIsUploading(false);
       setUploadMsg(null);
 
       if (onSubmit) {
-        onSubmit(result.url);
+        onSubmit(publicUrl);
       } else {
-        router.push(`/?url=${encodeURIComponent(result.url)}`);
+        router.push(`/?url=${encodeURIComponent(publicUrl)}`);
       }
     } catch (err) {
       setIsUploading(false);

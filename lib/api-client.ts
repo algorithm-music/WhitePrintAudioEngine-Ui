@@ -100,7 +100,7 @@ export async function postMasterBinary(body: Record<string, unknown>): Promise<{
 }
 
 /** Helper: upload file directly to Supabase Storage */
-async function uploadToSupabase(file: File): Promise<string> {
+export async function uploadToSupabase(file: File): Promise<string> {
   const { createClient } = await import('@/lib/supabase/client');
   const supabase = createClient();
   const timestamp = Date.now();
