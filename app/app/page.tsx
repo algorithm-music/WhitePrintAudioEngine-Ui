@@ -15,7 +15,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { postMaster, uploadToGCS, ApiError } from '@/lib/api-client';
+import { submitMasterJob, pollJob, uploadToGCS, ApiError } from '@/lib/api-client';
 import ABPlayer from '@/components/ab-player';
 
 type Job = {
@@ -36,12 +36,11 @@ type Job = {
 };
 
 /**
- * A "run" is an in-flight /api/master call started from this tab. We don't
- * poll the backend — /api/master blocks until mastering finishes — but we
- * never force the user onto a loading screen. Instead a compact row sits at
- * the top of the jobs list with a spinner + filename; the user can keep
- * browsing. When the fetch resolves we trigger a download and prepend the
- * finished job to the list.
+ * A "run" is an in-flight mastering job started from this tab. /api/master
+ * now returns a job_id immediately (202); the UI polls /api/jobs/{id} every
+ * 3 s. A compact row sits at the top of the jobs list with an elapsed
+ * counter that morphs into a DOWNLOAD button the moment polling flips
+ * status to `completed`. The user can keep browsing while it cooks.
  */
 interface LocalRun {
   localId: string;
@@ -56,6 +55,10 @@ interface LocalRun {
   downloadUrl?: string;
   /** Whether the AB player row is expanded under this run. */
   expanded?: boolean;
+  /** Backend-assigned job id (once /api/master submit has returned). */
+  jobId?: string;
+  /** Backing GCS object name so /api/jobs/[id] can sign a download URL. */
+  outputObject?: string | null;
   status: 'uploading' | 'processing' | 'done' | 'error';
 }
 
@@ -146,25 +149,81 @@ export default function DashboardPage() {
       const gcsUrl = await uploadToGCS(file);
       updateRun(localId, { status: 'processing', inputUrl: gcsUrl });
 
-      type Resp = { route: string; download_url: string };
-      const resp = await postMaster<Resp>({
+      const submit = await submitMasterJob({
         audio_url: gcsUrl,
         route: 'full',
       });
-
       updateRun(localId, {
-        status: 'done',
-        downloadUrl: resp.download_url,
-        // Expand the AB player automatically so BEFORE / AFTER is right
-        // there; user picks when (or whether) to actually download.
-        expanded: true,
+        jobId: submit.job_id,
+        outputObject: submit.output_object,
       });
-      void refreshJobs();
+      // The polling effect below takes over from here — no long-lived
+      // fetch, so a flaky CDN / browser timeout can't kill the run.
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'unknown error';
       updateRun(localId, { status: 'error', error: msg });
     }
-  }, [refreshJobs, updateRun]);
+  }, [updateRun]);
+
+  // Poll each processing run for completion. Keyed on the set of active
+  // job IDs so the interval is not torn down every second when the
+  // elapsed-counter effect bumps `runs`.
+  const pollKey = runs
+    .filter((r) => r.status === 'processing' && r.jobId)
+    .map((r) => r.jobId!)
+    .sort()
+    .join('|');
+
+  useEffect(() => {
+    if (!pollKey) return;
+
+    let cancelled = false;
+    const tick = async () => {
+      const active = runsRef.current.filter(
+        (r) => r.status === 'processing' && r.jobId,
+      );
+      for (const r of active) {
+        if (cancelled || !r.jobId) continue;
+        try {
+          const job = await pollJob(r.jobId, r.outputObject ?? null);
+          if (cancelled) return;
+          if (job.status === 'completed') {
+            updateRun(r.localId, {
+              status: 'done',
+              downloadUrl: job.download_url ?? undefined,
+              expanded: true,
+            });
+            void refreshJobs();
+          } else if (job.status === 'failed') {
+            updateRun(r.localId, {
+              status: 'error',
+              error: job.error || 'Pipeline failed.',
+            });
+          }
+          // queued / processing → keep counter ticking; try again next interval.
+        } catch (err) {
+          // Transient poll errors shouldn't kill the run. Only 404 (job
+          // evicted server-side) means we should give up.
+          if (err instanceof ApiError && err.status === 404) {
+            updateRun(r.localId, {
+              status: 'error',
+              error: 'Job expired before finishing.',
+            });
+          } else {
+            // eslint-disable-next-line no-console
+            console.warn('[poll] transient error, retrying:', err);
+          }
+        }
+      }
+    };
+
+    const handle = setInterval(() => void tick(), 3000);
+    void tick(); // fire once immediately so the first check isn't 3 s late
+    return () => {
+      cancelled = true;
+      clearInterval(handle);
+    };
+  }, [pollKey, updateRun, refreshJobs]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

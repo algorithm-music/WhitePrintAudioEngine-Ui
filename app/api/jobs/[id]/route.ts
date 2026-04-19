@@ -1,0 +1,124 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { generateDownloadUrl } from '@/lib/gcs';
+
+const CONCERTMASTER_URL = (
+  process.env.CONCERTMASTER_URL ||
+  'https://whiteprintaudioengine-concertmaster-270124753853.asia-northeast1.run.app'
+)
+  .trim()
+  .replace(/\/+$/, '');
+const CONCERTMASTER_API_KEY = (process.env.CONCERTMASTER_API_KEY || '').trim();
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
+
+/**
+ * GET /api/jobs/{job_id}?object=outputs/...
+ *
+ * Polls concertmaster for job status. When the job is completed and the
+ * caller supplied the output object name (from the /api/master submit
+ * response), sign a V4 GET URL so the browser can download the master
+ * straight from GCS without streaming bytes through Vercel.
+ *
+ * Shape:
+ *   queued / processing  → { status, stage?, route? }
+ *   completed            → { status, route, download_url, metrics, analysis, deliberation, elapsed_ms }
+ *   failed               → { status, error, http_status }
+ */
+export async function GET(
+  request: NextRequest,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  if (!CONCERTMASTER_API_KEY) {
+    return NextResponse.json(
+      { error: 'Server misconfiguration: CONCERTMASTER_API_KEY is not set.' },
+      { status: 500 },
+    );
+  }
+
+  const { id: jobId } = await ctx.params;
+  if (!jobId) {
+    return NextResponse.json({ error: 'job_id is required' }, { status: 400 });
+  }
+  const outputObject = request.nextUrl.searchParams.get('object') || null;
+
+  const targetUrl = `${CONCERTMASTER_URL}/api/v1/jobs/${encodeURIComponent(jobId)}`;
+  let response: Response;
+  try {
+    response = await fetch(targetUrl, {
+      method: 'GET',
+      headers: { 'X-Api-Key': CONCERTMASTER_API_KEY },
+      cache: 'no-store',
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    console.error(`[jobs] fetch threw: ${msg} | URL: ${targetUrl}`);
+    return NextResponse.json(
+      { error: `Failed to reach backend: ${msg}` },
+      { status: 502 },
+    );
+  }
+
+  if (!response.ok) {
+    let detail = `Backend error: ${response.status}`;
+    try {
+      const err = await response.json();
+      detail = err.detail || err.error || detail;
+    } catch {
+      /* not json */
+    }
+    return NextResponse.json(
+      { error: detail },
+      { status: response.status },
+    );
+  }
+
+  const data = (await response.json()) as {
+    job_id: string;
+    status: string;
+    stage?: string;
+    route?: string;
+    result?: Record<string, unknown>;
+    error?: string;
+    http_status?: number;
+  };
+
+  if (data.status === 'completed') {
+    const result = (data.result || {}) as Record<string, unknown>;
+    let downloadUrl: string | null = null;
+    if (outputObject) {
+      try {
+        downloadUrl = await generateDownloadUrl(outputObject, 60);
+      } catch (err) {
+        console.error('[jobs] failed to sign download URL:', err);
+      }
+    }
+    return NextResponse.json({
+      job_id: data.job_id,
+      status: 'completed',
+      route: data.route || result.route,
+      download_url: downloadUrl,
+      metrics: result.dsp_metrics || result.metrics || {},
+      analysis: result.analysis,
+      deliberation: result.deliberation,
+      elapsed_ms: result.elapsed_ms,
+    });
+  }
+
+  if (data.status === 'failed') {
+    return NextResponse.json({
+      job_id: data.job_id,
+      status: 'failed',
+      error: data.error || 'Pipeline failed.',
+      http_status: data.http_status || 500,
+    });
+  }
+
+  // queued / processing
+  return NextResponse.json({
+    job_id: data.job_id,
+    status: data.status,
+    stage: data.stage,
+    route: data.route,
+  });
+}

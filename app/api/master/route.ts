@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import {
-  generateDownloadUrl,
-  makeObjectName,
-  objectToFusePath,
-} from '@/lib/gcs';
+import { makeObjectName, objectToFusePath } from '@/lib/gcs';
 
 const CONCERTMASTER_URL = (
   process.env.CONCERTMASTER_URL ||
@@ -16,27 +12,25 @@ const CONCERTMASTER_API_KEY = (process.env.CONCERTMASTER_API_KEY || '').trim();
 
 const FREE_TRACKS_LIMIT = 3;
 
-export const maxDuration = 800;
+/**
+ * Async submit.
+ *
+ * Up through commit `2b8cbc7` this route held the HTTP connection open for
+ * the full 5-10 minute mastering run. That blew up intermittently — Vercel
+ * Functions, the browser, and any CDN in between all have their own idle
+ * timeouts, and at ~9 months of attempted shipping we've had enough
+ * `TypeError: fetch failed` incidents to kill that pattern.
+ *
+ * New contract:
+ *   POST /api/master        →  { job_id, output_object }          (202)
+ *   GET  /api/jobs/{id}?object=…  →  { status, download_url? }     (poll)
+ *
+ * The browser submits once, then polls every few seconds. No long-lived
+ * connections, no keep-alive gymnastics.
+ */
+export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
 
-/**
- * POST /api/master
- *   body: {
- *     // input (choose one):
- *     gcs_object?: string,                      // preferred — object under GCS_BUCKET uploaded via /api/presign-upload
- *     audio_url?:  string,                      // legacy — HTTPS URL (GDrive etc.)
- *     route?:      'full' | 'analyze_only' | 'deliberation_only' | 'dsp_only',
- *     target_lufs?: number,
- *     target_true_peak?: number,
- *     sage_config?: object,
- *     dsp_config?:  object,
- *     manual_params?: object,
- *   }
- *
- * The mastered WAV is never transferred through Vercel. rendition-dsp writes
- * the output directly to the GCSFuse-mounted bucket; this route then signs a
- * V4 GET URL for the browser to download.
- */
 export async function POST(request: NextRequest) {
   if (!CONCERTMASTER_API_KEY) {
     return NextResponse.json(
@@ -137,12 +131,9 @@ export async function POST(request: NextRequest) {
       cmBody.output_path = outputFusePath;
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 780_000);
-
     const targetUrl = `${CONCERTMASTER_URL}/api/v1/jobs/master`;
     console.log(
-      `[master] → ${targetUrl} | gcs_object=${gcsObject ?? '(none)'} | output_object=${outputObject ?? '(none)'}`,
+      `[master] submit → ${targetUrl} | gcs_object=${gcsObject ?? '(none)'} | output_object=${outputObject ?? '(none)'}`,
     );
 
     let response: Response;
@@ -154,87 +145,53 @@ export async function POST(request: NextRequest) {
           'X-Api-Key': CONCERTMASTER_API_KEY,
         },
         body: JSON.stringify(cmBody),
-        signal: controller.signal,
       });
-      console.log(
-        `[master] ← ${response.status} ${response.statusText} | content-type=${response.headers.get('content-type')}`,
-      );
+      console.log(`[master] submit ← ${response.status} ${response.statusText}`);
     } catch (err) {
-      clearTimeout(timeout);
       const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-      console.error(`[master] fetch threw: ${msg} | URL: ${targetUrl}`);
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        return NextResponse.json(
-          { error: 'Backend request timed out after 13 minutes.' },
-          { status: 504 },
-        );
-      }
+      console.error(`[master] submit fetch threw: ${msg} | URL: ${targetUrl}`);
       return NextResponse.json(
         { error: `Failed to reach backend: ${msg}` },
         { status: 502 },
       );
     }
-    clearTimeout(timeout);
 
-    const contentType = response.headers.get('content-type') || '';
-
-    // Happy path: concertmaster wrote the master to the shared GCSFuse mount
-    // (because we sent output_path) and replied with JSON metrics.
-    if (contentType.includes('application/json')) {
-      const data = await response.json();
-
-      if (!response.ok) {
-        const raw = data.detail || data.error || `Backend error: ${response.status}`;
-        console.error(`[master] backend ${response.status}: ${raw}`);
-        return NextResponse.json(
-          { error: humanizeError(raw, response.status), detail: raw },
-          { status: response.status },
-        );
+    if (!response.ok && response.status !== 202) {
+      let detail = `Backend error: ${response.status}`;
+      try {
+        const err = await response.json();
+        detail = err.detail || err.error || detail;
+      } catch {
+        /* not json */
       }
-
-      if (isMasteringRoute && user) {
-        await incrementUsage(user.id);
-      }
-
-      if (outputObject) {
-        // Sign a V4 GET URL the browser can download from. No Vercel bytes transfer.
-        const downloadUrl = await generateDownloadUrl(outputObject, 60);
-        return NextResponse.json({
-          route: data.route || route,
-          download_url: downloadUrl,
-          metrics: data.dsp_metrics || data.metrics || {},
-          analysis: data.analysis,
-          deliberation: data.deliberation,
-          elapsed_ms: data.elapsed_ms,
-        });
-      }
-
-      // Non-mastering routes (analyze_only / deliberation_only) — pass through.
-      return NextResponse.json(data);
-    }
-
-    // Legacy path: concertmaster returned audio bytes (only when neither
-    // output_path nor output_url was set — shouldn't normally happen).
-    if (contentType.startsWith('audio/')) {
-      console.warn(
-        '[master] backend returned audio bytes; this path is legacy and should not fire when output_path is set.',
-      );
+      console.error(`[master] submit backend ${response.status}: ${detail}`);
       return NextResponse.json(
-        {
-          error:
-            'Backend returned raw audio bytes, but GCS output was expected. Check that input_path / output_path wiring is in place.',
-        },
-        { status: 500 },
+        { error: humanizeError(detail, response.status), detail },
+        { status: response.status },
       );
     }
 
-    const text = await response.text();
-    console.error(
-      `[master] unexpected content-type: ${contentType} | status=${response.status} | body[:200]=${text.slice(0, 200)}`,
-    );
+    const data = (await response.json()) as {
+      job_id: string;
+      status: string;
+      route: string;
+    };
+
+    // Count the track as used at submit time. Jobs that later fail won't
+    // decrement, which is consistent with how the sync path behaved after
+    // completion — we choose the simpler, stateless variant.
+    if (isMasteringRoute && user) {
+      await incrementUsage(user.id);
+    }
+
     return NextResponse.json(
-      { error: `Unexpected backend response (${response.status}).`, detail: text.slice(0, 500) },
-      { status: response.status || 500 },
+      {
+        job_id: data.job_id,
+        status: data.status,
+        route: data.route || route,
+        output_object: outputObject,
+      },
+      { status: 202 },
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown proxy error';

@@ -41,26 +41,77 @@ function normalizeInputFields(
   return body;
 }
 
-export async function postMaster<T>(body: Record<string, unknown>): Promise<T> {
+export interface SubmitMasterResponse {
+  job_id: string;
+  status: string;
+  route: string;
+  output_object: string | null;
+}
+
+export interface JobStatus<TResult = Record<string, unknown>> {
+  job_id: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  stage?: string;
+  route?: string;
+  download_url?: string | null;
+  metrics?: Record<string, unknown>;
+  analysis?: TResult;
+  deliberation?: TResult;
+  elapsed_ms?: number;
+  error?: string;
+  http_status?: number;
+}
+
+/**
+ * Submit a mastering job. Returns immediately with a job_id; poll via
+ * {@link pollJob} until status is `completed` or `failed`.
+ */
+export async function submitMasterJob(
+  body: Record<string, unknown>,
+): Promise<SubmitMasterResponse> {
   const payload = normalizeInputFields(body);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 780_000);
   let res: Response;
   try {
     res = await fetch('/api/master', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-      signal: controller.signal,
     });
   } catch (err) {
-    clearTimeout(timeout);
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new ApiError('Request timed out after 13 minutes. The backend may be overloaded.', 408);
+    if (err instanceof Error) {
+      throw new ApiError(`Failed to reach backend: ${err.message}`, 502);
     }
     throw err;
   }
-  clearTimeout(timeout);
+
+  if (!res.ok && res.status !== 202) {
+    let message = `Backend error (${res.status})`;
+    try {
+      const err = await res.json();
+      if (err.error) message = err.error;
+      else if (err.detail) message = err.detail;
+    } catch {
+      /* response body was not JSON */
+    }
+    throw new ApiError(message, res.status);
+  }
+
+  return res.json() as Promise<SubmitMasterResponse>;
+}
+
+/**
+ * Poll a job's status once. Callers are expected to schedule the interval
+ * (e.g. 3 s in the dashboard) so this stays a dumb single-shot helper.
+ */
+export async function pollJob(
+  jobId: string,
+  outputObject: string | null,
+): Promise<JobStatus> {
+  const qs = outputObject ? `?object=${encodeURIComponent(outputObject)}` : '';
+  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}${qs}`, {
+    method: 'GET',
+    cache: 'no-store',
+  });
 
   if (!res.ok) {
     let message = `Backend error (${res.status})`;
@@ -74,7 +125,44 @@ export async function postMaster<T>(body: Record<string, unknown>): Promise<T> {
     throw new ApiError(message, res.status);
   }
 
-  return res.json() as Promise<T>;
+  return res.json() as Promise<JobStatus>;
+}
+
+/**
+ * Legacy sync-style helper kept for callers that still expect `{ download_url }`
+ * back in one shot (the narrative flow in `app/mastering/...` uses this).
+ * Internally submits + polls. For new UI, prefer calling submitMasterJob +
+ * pollJob directly so you can render progress.
+ */
+export async function postMaster<T>(body: Record<string, unknown>): Promise<T> {
+  const submit = await submitMasterJob(body);
+
+  // Poll until terminal. Cap at ~15 min so a wedged job doesn't pin a tab.
+  const deadline = Date.now() + 15 * 60 * 1000;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (Date.now() > deadline) {
+      throw new ApiError(
+        'Mastering is taking longer than expected. Check Recent masters in the dashboard — it may still complete.',
+        504,
+      );
+    }
+    await new Promise((r) => setTimeout(r, 3000));
+    const job = await pollJob(submit.job_id, submit.output_object);
+    if (job.status === 'completed') {
+      return {
+        route: job.route,
+        download_url: job.download_url,
+        metrics: job.metrics,
+        analysis: job.analysis,
+        deliberation: job.deliberation,
+        elapsed_ms: job.elapsed_ms,
+      } as unknown as T;
+    }
+    if (job.status === 'failed') {
+      throw new ApiError(job.error || 'Pipeline failed.', job.http_status || 500);
+    }
+  }
 }
 
 /**
