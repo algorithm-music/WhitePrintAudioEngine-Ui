@@ -11,12 +11,12 @@ import {
   ChevronRight,
   Clock,
   Download,
-  FileAudio,
   ListMusic,
   Upload,
   X,
 } from 'lucide-react';
 import { postMaster, uploadToGCS, ApiError } from '@/lib/api-client';
+import ABPlayer from '@/components/ab-player';
 
 type Job = {
   id: string;
@@ -47,9 +47,22 @@ interface LocalRun {
   localId: string;
   filename: string;
   startedAt: number;
+  /** Running wall-clock seconds since startedAt; flips to a download button on done. */
+  elapsed: number;
   error?: string;
+  /** Signed GET URL to the original upload (for the AB player's A side). */
+  inputUrl?: string;
+  /** Signed GET URL to the mastered result (for the AB player's B side). */
   downloadUrl?: string;
+  /** Whether the AB player row is expanded under this run. */
+  expanded?: boolean;
   status: 'uploading' | 'processing' | 'done' | 'error';
+}
+
+function fmtElapsed(s: number) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
 const ACCEPTED_EXT = ['.wav', '.flac', '.aiff', '.aif', '.mp3'];
@@ -103,16 +116,35 @@ export default function DashboardPage() {
     setRuns((prev) => prev.filter((r) => r.localId !== id));
   }, []);
 
+  // Tick elapsed for any active run so the count keeps moving until the
+  // /api/master fetch resolves and it morphs into a download button.
+  useEffect(() => {
+    const anyActive = runs.some(
+      (r) => r.status === 'uploading' || r.status === 'processing',
+    );
+    if (!anyActive) return;
+    const t = setInterval(() => {
+      setRuns((prev) =>
+        prev.map((r) =>
+          r.status === 'uploading' || r.status === 'processing'
+            ? { ...r, elapsed: r.elapsed + 1 }
+            : r,
+        ),
+      );
+    }, 1000);
+    return () => clearInterval(t);
+  }, [runs]);
+
   const startRun = useCallback(async (file: File) => {
     const localId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     setRuns((prev) => [
-      { localId, filename: file.name, startedAt: Date.now(), status: 'uploading' },
+      { localId, filename: file.name, startedAt: Date.now(), status: 'uploading', elapsed: 0 },
       ...prev,
     ]);
 
     try {
       const gcsUrl = await uploadToGCS(file);
-      updateRun(localId, { status: 'processing' });
+      updateRun(localId, { status: 'processing', inputUrl: gcsUrl });
 
       type Resp = { route: string; download_url: string };
       const resp = await postMaster<Resp>({
@@ -120,18 +152,13 @@ export default function DashboardPage() {
         route: 'full',
       });
 
-      updateRun(localId, { status: 'done', downloadUrl: resp.download_url });
-
-      // Auto-download the finished WAV. No screen transition, no ceremony.
-      if (resp.download_url && typeof document !== 'undefined') {
-        const a = document.createElement('a');
-        a.href = resp.download_url;
-        a.download = file.name.replace(/\.[^.]+$/, '') + '-mastered.wav';
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }
+      updateRun(localId, {
+        status: 'done',
+        downloadUrl: resp.download_url,
+        // Expand the AB player automatically so BEFORE / AFTER is right
+        // there; user picks when (or whether) to actually download.
+        expanded: true,
+      });
       void refreshJobs();
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'unknown error';
@@ -244,48 +271,98 @@ export default function DashboardPage() {
                     : r.status === 'error'
                       ? 'text-red-400'
                       : 'text-indigo-400';
+                const canCompare = r.status === 'done' && r.inputUrl && r.downloadUrl;
                 return (
                   <motion.div
                     key={r.localId}
                     initial={{ opacity: 0, y: -8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
-                    className="flex items-center gap-4 px-4 py-3 text-sm bg-zinc-950/60"
+                    className="bg-zinc-950/60"
                   >
-                    {spin ? (
-                      <div className="w-4 h-4 shrink-0 rounded-full border border-indigo-400/50 border-t-indigo-400 animate-spin" />
-                    ) : r.status === 'done' ? (
-                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                    ) : (
-                      <Activity className="w-4 h-4 shrink-0 text-red-400" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-mono text-zinc-200">{r.filename}</div>
-                      <div className={`text-[10px] font-mono mt-0.5 ${doneColor}`}>
-                        {r.status === 'uploading' && 'uploading…'}
-                        {r.status === 'processing' && 'mastering (running in background)'}
-                        {r.status === 'done' && 'done · downloaded'}
-                        {r.status === 'error' && `error · ${r.error}`}
+                    <div className="flex items-center gap-4 px-4 py-3 text-sm">
+                      {spin ? (
+                        <div className="w-4 h-4 shrink-0 rounded-full border border-indigo-400/50 border-t-indigo-400 animate-spin" />
+                      ) : r.status === 'done' ? (
+                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                      ) : (
+                        <Activity className="w-4 h-4 shrink-0 text-red-400" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-mono text-zinc-200">{r.filename}</div>
+                        <div className={`text-[10px] font-mono mt-0.5 ${doneColor}`}>
+                          {r.status === 'uploading' && 'uploading…'}
+                          {r.status === 'processing' && 'mastering (running in background)'}
+                          {r.status === 'done' && 'done · compare A / B below'}
+                          {r.status === 'error' && `error · ${r.error}`}
+                        </div>
                       </div>
+
+                      {canCompare && (
+                        <button
+                          onClick={() => updateRun(r.localId, { expanded: !r.expanded })}
+                          className="text-xs font-mono text-zinc-400 hover:text-zinc-100 shrink-0"
+                        >
+                          {r.expanded ? 'hide A/B' : 'A / B'}
+                        </button>
+                      )}
+
+                      {/* The elapsed counter and the download button occupy the
+                          same slot: the counter ticks while mastering runs,
+                          then morphs into a download button when it finishes. */}
+                      <div className="relative w-32 h-8 shrink-0">
+                        <AnimatePresence mode="wait" initial={false}>
+                          {r.status === 'done' && r.downloadUrl ? (
+                            <motion.a
+                              key="dl"
+                              href={r.downloadUrl}
+                              download={r.filename.replace(/\.[^.]+$/, '') + '-mastered.wav'}
+                              initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.96 }}
+                              transition={{ duration: 0.25 }}
+                              className="absolute inset-0 flex items-center justify-center gap-1.5 rounded-md bg-emerald-500 text-black text-xs font-mono font-semibold hover:bg-emerald-400 shadow-[0_0_18px_rgba(16,185,129,0.35)]"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              DOWNLOAD
+                            </motion.a>
+                          ) : r.status === 'error' ? (
+                            <motion.div
+                              key="err"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              className="absolute inset-0 flex items-center justify-center text-[10px] font-mono text-red-400 truncate px-2"
+                            >
+                              {r.error}
+                            </motion.div>
+                          ) : (
+                            <motion.div
+                              key="count"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              className="absolute inset-0 flex items-center justify-end font-mono tabular-nums text-zinc-400 pr-1"
+                            >
+                              {fmtElapsed(r.elapsed)}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+
+                      {(r.status === 'done' || r.status === 'error') && (
+                        <button
+                          onClick={() => dismissRun(r.localId)}
+                          className="text-zinc-600 hover:text-zinc-300 shrink-0"
+                          aria-label="dismiss"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
-                    {r.status === 'done' && r.downloadUrl && (
-                      <a
-                        href={r.downloadUrl}
-                        download={r.filename.replace(/\.[^.]+$/, '') + '-mastered.wav'}
-                        className="flex items-center gap-1 text-xs font-mono text-emerald-400 hover:text-emerald-300 shrink-0"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        download again
-                      </a>
-                    )}
-                    {(r.status === 'done' || r.status === 'error') && (
-                      <button
-                        onClick={() => dismissRun(r.localId)}
-                        className="text-zinc-600 hover:text-zinc-300 shrink-0"
-                        aria-label="dismiss"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                    {canCompare && r.expanded && r.inputUrl && r.downloadUrl && (
+                      <div className="px-4 pb-4">
+                        <ABPlayer audioUrl={r.inputUrl} masteredUrl={r.downloadUrl} />
+                      </div>
                     )}
                   </motion.div>
                 );
@@ -351,5 +428,3 @@ export default function DashboardPage() {
   );
 }
 
-// (FileAudio imported above is kept for possible future per-run file icons.)
-void FileAudio;

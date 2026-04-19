@@ -1,436 +1,600 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, AlertCircle } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  Activity,
+  AlertCircle,
+  BarChart3,
+  Pause,
+  Play,
+  RotateCcw,
+} from 'lucide-react';
 
 interface ABPlayerProps {
+  /** URL that plays on the "A" side (original / before). */
   audioUrl: string | null;
+  /** URL that plays on the "B" side (mastered / after). */
   masteredUrl: string | null;
 }
 
-export default function ABPlayer({ audioUrl, masteredUrl }: ABPlayerProps) {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [activeTrack, setActiveTrack] = useState<'A' | 'B'>('B');
-  const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [aReady, setAReady] = useState(false);
-  const [bReady, setBReady] = useState(false);
-  const [volume, setVolume] = useState(0.85);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isSwitching, setIsSwitching] = useState(false);
-  const [aPeaks, setAPeaks] = useState<Float32Array | null>(null);
-  const [bPeaks, setBPeaks] = useState<Float32Array | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+// ─── Web Audio engine (ported from Yomibito-Shirazu-jp/MasteringVisualizer) ──
+class ABEngine {
+  private context: AudioContext;
+  analyzer: AnalyserNode;
+  private gainNode: GainNode;
+  private splitter: ChannelSplitterNode;
+  private meterL: AnalyserNode;
+  private meterR: AnalyserNode;
 
-  const aRef = useRef<HTMLAudioElement | null>(null);
-  const bRef = useRef<HTMLAudioElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const animFrameRef = useRef<number>(0);
+  private bufferA: AudioBuffer | null = null;
+  private bufferB: AudioBuffer | null = null;
+  private sourceA: AudioBufferSourceNode | null = null;
+  private sourceB: AudioBufferSourceNode | null = null;
+  private gainA: GainNode | null = null;
+  private gainB: GainNode | null = null;
 
-  const active = activeTrack === 'A' ? aRef : bRef;
-  const inactive = activeTrack === 'A' ? bRef : aRef;
-  const activePeaks = activeTrack === 'A' ? aPeaks : bPeaks;
+  private startCtxTime = 0;
+  private offset = 0;
+  private playing = false;
+  private active: 'A' | 'B' = 'B';
 
-  // Extract waveform peaks from audio URL
-  const extractPeaks = useCallback(async (url: string, setCb: (p: Float32Array) => void) => {
-    try {
-      const audioCtx = new AudioContext();
-      const response = await fetch(url);
-      if (!response.ok) return;
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-      const channelData = audioBuffer.getChannelData(0);
-      const numBars = 200;
-      const blockSize = Math.floor(channelData.length / numBars);
-      const peaks = new Float32Array(numBars);
-      for (let i = 0; i < numBars; i++) {
-        let sum = 0;
-        const start = i * blockSize;
-        for (let j = 0; j < blockSize; j++) {
-          sum += Math.abs(channelData[start + j]);
-        }
-        peaks[i] = sum / blockSize;
+  constructor() {
+    const Ctx =
+      (window as unknown as { AudioContext?: typeof AudioContext }).AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) throw new Error('Web Audio API not available.');
+    this.context = new Ctx();
+
+    this.analyzer = this.context.createAnalyser();
+    this.analyzer.fftSize = 2048;
+
+    this.gainNode = this.context.createGain();
+    this.gainNode.connect(this.analyzer);
+    this.analyzer.connect(this.context.destination);
+
+    this.splitter = this.context.createChannelSplitter(2);
+    this.meterL = this.context.createAnalyser();
+    this.meterR = this.context.createAnalyser();
+    this.meterL.fftSize = 256;
+    this.meterR.fftSize = 256;
+    this.analyzer.connect(this.splitter);
+    this.splitter.connect(this.meterL, 0);
+    this.splitter.connect(this.meterR, 1);
+  }
+
+  async loadUrl(url: string, side: 'A' | 'B'): Promise<void> {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+    const arrayBuffer = await resp.arrayBuffer();
+    const audioBuffer = await this.context.decodeAudioData(arrayBuffer);
+    if (side === 'A') this.bufferA = audioBuffer;
+    else this.bufferB = audioBuffer;
+  }
+
+  getDuration(): number {
+    return Math.max(this.bufferA?.duration ?? 0, this.bufferB?.duration ?? 0);
+  }
+
+  getCurrentTime(): number {
+    if (!this.playing) return this.offset;
+    return Math.min(this.getDuration(), this.context.currentTime - this.startCtxTime);
+  }
+
+  getActive(): 'A' | 'B' {
+    return this.active;
+  }
+
+  getMeter(): { l: number; r: number } {
+    const peak = (a: AnalyserNode) => {
+      const data = new Uint8Array(a.frequencyBinCount);
+      a.getByteTimeDomainData(data);
+      let max = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = Math.abs(data[i] - 128) / 128;
+        if (v > max) max = v;
       }
-      // Normalize
-      const max = Math.max(...peaks);
-      if (max > 0) {
-        for (let i = 0; i < peaks.length; i++) {
-          peaks[i] /= max;
-        }
-      }
-      setCb(peaks);
-      audioCtx.close();
-    } catch {
-      // CORS or decode failure — no waveform
-    }
-  }, []);
-
-  // Init A (original)
-  useEffect(() => {
-    if (!audioUrl) return;
-    const a = new Audio();
-    a.crossOrigin = 'anonymous';
-    a.preload = 'metadata';
-    a.src = audioUrl;
-    aRef.current = a;
-    a.addEventListener('loadedmetadata', () => setAReady(true));
-    a.addEventListener('error', () => setAReady(false));
-    extractPeaks(audioUrl, setAPeaks);
-    return () => { a.pause(); a.src = ''; };
-  }, [audioUrl, extractPeaks]);
-
-  // Init B (mastered)
-  useEffect(() => {
-    if (!masteredUrl) return;
-    const b = new Audio();
-    b.preload = 'metadata';
-    b.src = masteredUrl;
-    bRef.current = b;
-    b.addEventListener('loadedmetadata', () => { setBReady(true); setDuration(b.duration); });
-    b.addEventListener('error', () => setBReady(false));
-    extractPeaks(masteredUrl, setBPeaks);
-    return () => { b.pause(); b.src = ''; };
-  }, [masteredUrl, extractPeaks]);
-
-  // Volume sync
-  useEffect(() => {
-    const v = isMuted ? 0 : volume;
-    if (aRef.current) aRef.current.volume = v;
-    if (bRef.current) bRef.current.volume = v;
-  }, [volume, isMuted]);
-
-  // Time tracking
-  useEffect(() => {
-    const el = active.current;
-    if (!el) return;
-    const onTime = () => {
-      if (el.duration) {
-        setProgress((el.currentTime / el.duration) * 100);
-        setCurrentTime(el.currentTime);
-      }
+      return max;
     };
-    const onEnd = () => { setIsPlaying(false); setProgress(0); setCurrentTime(0); };
-    el.addEventListener('timeupdate', onTime);
-    el.addEventListener('ended', onEnd);
-    return () => { el.removeEventListener('timeupdate', onTime); el.removeEventListener('ended', onEnd); };
-  }, [activeTrack, active]);
+    return { l: peak(this.meterL), r: peak(this.meterR) };
+  }
 
-  // Play/pause
-  useEffect(() => {
-    const act = active.current;
-    const inact = inactive.current;
-    if (!act) return;
-    if (isPlaying) act.play().catch(() => {});
-    else act.pause();
-    if (inact) inact.pause();
-  }, [isPlaying, activeTrack, active, inactive]);
+  private teardown() {
+    if (this.sourceA) {
+      try { this.sourceA.stop(); } catch {}
+      this.sourceA.disconnect();
+      this.sourceA = null;
+    }
+    if (this.sourceB) {
+      try { this.sourceB.stop(); } catch {}
+      this.sourceB.disconnect();
+      this.sourceB = null;
+    }
+    if (this.gainA) { this.gainA.disconnect(); this.gainA = null; }
+    if (this.gainB) { this.gainB.disconnect(); this.gainB = null; }
+  }
 
-  // Canvas waveform rendering
+  play(): void {
+    if (this.playing) return;
+    if (!this.bufferA && !this.bufferB) return;
+    if (this.context.state === 'suspended') void this.context.resume();
+
+    this.teardown();
+    this.gainA = this.context.createGain();
+    this.gainB = this.context.createGain();
+    this.gainA.connect(this.gainNode);
+    this.gainB.connect(this.gainNode);
+    this.gainA.gain.value = this.active === 'A' ? 1 : 0;
+    this.gainB.gain.value = this.active === 'B' ? 1 : 0;
+
+    if (this.bufferA) {
+      this.sourceA = this.context.createBufferSource();
+      this.sourceA.buffer = this.bufferA;
+      this.sourceA.connect(this.gainA);
+      this.sourceA.start(0, this.offset);
+    }
+    if (this.bufferB) {
+      this.sourceB = this.context.createBufferSource();
+      this.sourceB.buffer = this.bufferB;
+      this.sourceB.connect(this.gainB);
+      this.sourceB.start(0, this.offset);
+    }
+
+    this.startCtxTime = this.context.currentTime - this.offset;
+    this.playing = true;
+
+    // When one of them ends, stop cleanly.
+    if (this.sourceB) {
+      this.sourceB.onended = () => {
+        if (this.playing && this.getCurrentTime() >= this.getDuration() - 0.05) {
+          this.playing = false;
+          this.offset = 0;
+        }
+      };
+    } else if (this.sourceA) {
+      this.sourceA.onended = () => {
+        if (this.playing && this.getCurrentTime() >= this.getDuration() - 0.05) {
+          this.playing = false;
+          this.offset = 0;
+        }
+      };
+    }
+  }
+
+  pause(): void {
+    if (!this.playing) return;
+    this.offset = this.getCurrentTime();
+    this.teardown();
+    this.playing = false;
+  }
+
+  isPlaying(): boolean {
+    return this.playing;
+  }
+
+  seek(time: number): void {
+    const wasPlaying = this.playing;
+    this.pause();
+    this.offset = Math.max(0, Math.min(this.getDuration(), time));
+    if (wasPlaying) this.play();
+  }
+
+  switchTo(side: 'A' | 'B'): void {
+    this.active = side;
+    if (!this.gainA || !this.gainB) return;
+    const t = this.context.currentTime;
+    this.gainA.gain.setTargetAtTime(side === 'A' ? 1 : 0, t, 0.01);
+    this.gainB.gain.setTargetAtTime(side === 'B' ? 1 : 0, t, 0.01);
+  }
+
+  async close(): Promise<void> {
+    this.teardown();
+    try { await this.context.close(); } catch {}
+  }
+}
+
+// ─── Canvas visualizer (frequency + waveform modes) ──────────────────────────
+function SpectrumCanvas({
+  analyzer,
+  color,
+  mode,
+}: {
+  analyzer: AnalyserNode | null;
+  color: string;
+  mode: 'frequency' | 'waveform';
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rafRef = useRef<number | null>(null);
+
   useEffect(() => {
+    if (!analyzer || !canvasRef.current) return;
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    const draw = () => {
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
+    const resize = () => {
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
-      ctx.scale(dpr, dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
 
-      const w = rect.width;
-      const h = rect.height;
+    const bins = analyzer.frequencyBinCount;
+    const data = new Uint8Array(bins);
+
+    const tick = () => {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
       ctx.clearRect(0, 0, w, h);
 
-      const peaks = activePeaks;
-      if (!peaks || peaks.length === 0) {
-        // No waveform — draw placeholder bars
-        ctx.fillStyle = activeTrack === 'B' ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.05)';
-        for (let i = 0; i < 200; i++) {
-          const x = (i / 200) * w;
-          const barH = (Math.random() * 0.3 + 0.1) * h;
-          ctx.fillRect(x, (h - barH) / 2, w / 200 - 1, barH);
+      if (mode === 'frequency') {
+        analyzer.getByteFrequencyData(data);
+        const barW = (w / bins) * 2.5;
+        let x = 0;
+        for (let i = 0; i < bins; i++) {
+          const bh = (data[i] / 255) * h;
+          const g = ctx.createLinearGradient(0, h, 0, h - bh);
+          g.addColorStop(0, color + '22');
+          g.addColorStop(1, color);
+          ctx.fillStyle = g;
+          ctx.fillRect(x, h - bh, barW, bh);
+          if (data[i] > 0) {
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = color;
+            ctx.fillStyle = color;
+            ctx.fillRect(x, h - bh, barW, 2);
+            ctx.shadowBlur = 0;
+          }
+          x += barW + 1;
+          if (x > w) break;
         }
-        animFrameRef.current = requestAnimationFrame(draw);
-        return;
+      } else {
+        analyzer.getByteTimeDomainData(data);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = color;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = color;
+        ctx.beginPath();
+        const slice = w / bins;
+        let x = 0;
+        for (let i = 0; i < bins; i++) {
+          const v = data[i] / 128.0;
+          const y = (v * h) / 2;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+          x += slice;
+        }
+        ctx.lineTo(w, h / 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
       }
 
-      const barW = w / peaks.length;
-      const progressFrac = progress / 100;
-      const accentRGB = activeTrack === 'B' ? [16, 185, 129] : [165, 160, 255];
-
-      for (let i = 0; i < peaks.length; i++) {
-        const x = i * barW;
-        const peakVal = peaks[i];
-        const barH = Math.max(2, peakVal * h * 0.85);
-        const y = (h - barH) / 2;
-        const frac = i / peaks.length;
-
-        if (frac < progressFrac) {
-          // Played region — bright
-          ctx.fillStyle = `rgba(${accentRGB[0]},${accentRGB[1]},${accentRGB[2]},0.85)`;
-        } else {
-          // Unplayed region — dim
-          ctx.fillStyle = `rgba(${accentRGB[0]},${accentRGB[1]},${accentRGB[2]},0.15)`;
-        }
-
-        // Rounded bars
-        const radius = Math.min(1.5, barW / 2 - 0.5);
-        const bw = barW - 1;
-        if (bw > 0 && barH > 0) {
-          ctx.beginPath();
-          ctx.roundRect(x, y, bw, barH, radius);
-          ctx.fill();
-        }
-      }
-
-      // Playhead line
-      if (duration > 0) {
-        const px = progressFrac * w;
-        ctx.fillStyle = `rgba(${accentRGB[0]},${accentRGB[1]},${accentRGB[2]},1)`;
-        ctx.fillRect(px - 0.5, 0, 1.5, h);
-
-        // Glow
-        const grad = ctx.createLinearGradient(px - 8, 0, px + 8, 0);
-        grad.addColorStop(0, 'transparent');
-        grad.addColorStop(0.5, `rgba(${accentRGB[0]},${accentRGB[1]},${accentRGB[2]},0.25)`);
-        grad.addColorStop(1, 'transparent');
-        ctx.fillStyle = grad;
-        ctx.fillRect(px - 8, 0, 16, h);
-      }
-
-      animFrameRef.current = requestAnimationFrame(draw);
+      rafRef.current = requestAnimationFrame(tick);
     };
+    tick();
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      ro.disconnect();
+    };
+  }, [analyzer, color, mode]);
 
-    draw();
-    return () => cancelAnimationFrame(animFrameRef.current);
-  }, [activePeaks, progress, activeTrack, duration]);
+  return <canvas ref={canvasRef} className="w-full h-full block" />;
+}
 
-  // A/B switch
-  const handleSwitch = useCallback((track: 'A' | 'B') => {
-    if (track === activeTrack) return;
-    setIsSwitching(true);
-    const cur = active.current;
-    const next = track === 'A' ? aRef.current : bRef.current;
-    if (cur && next) {
-      next.currentTime = cur.currentTime;
-      cur.pause();
-      if (isPlaying) next.play().catch(() => {});
+// ─── Segmented peak meter with peak-hold ─────────────────────────────────────
+function PeakMeter({ level, label }: { level: number; label: string }) {
+  const [hold, setHold] = useState(0);
+  const holdT = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (level > hold) {
+      setHold(level);
+      if (holdT.current) clearTimeout(holdT.current);
+      holdT.current = setTimeout(() => setHold(0), 1200);
     }
-    setActiveTrack(track);
-    setTimeout(() => setIsSwitching(false), 200);
-  }, [activeTrack, isPlaying, active]);
+  }, [level, hold]);
 
-  const seekTo = useCallback((clientX: number) => {
-    const container = containerRef.current;
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const el = active.current;
-    if (el && el.duration) {
-      el.currentTime = pct * el.duration;
-      setProgress(pct * 100);
-      setCurrentTime(pct * el.duration);
+  const segments = 24;
+  return (
+    <div className="flex flex-col items-center gap-1 h-full">
+      <div className="flex flex-col-reverse gap-[2px] h-full w-3 bg-black/50 rounded-sm p-[2px] border border-zinc-800/50">
+        {Array.from({ length: segments }).map((_, i) => {
+          const threshold = i / segments;
+          const on = level > threshold;
+          const peak = Math.abs(hold - threshold) < 1 / segments && hold > 0;
+          let c = 'bg-emerald-500/15';
+          if (i > segments * 0.85) c = 'bg-red-500/20';
+          else if (i > segments * 0.7) c = 'bg-amber-400/20';
+          if (on || peak) {
+            if (i > segments * 0.85) c = 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]';
+            else if (i > segments * 0.7) c = 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]';
+            else c = 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]';
+          }
+          return <div key={i} className={`w-full flex-1 rounded-[1px] transition-colors ${c}`} />;
+        })}
+      </div>
+      <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest">{label}</span>
+    </div>
+  );
+}
+
+// ─── Main component ──────────────────────────────────────────────────────────
+export default function ABPlayer({ audioUrl, masteredUrl }: ABPlayerProps) {
+  const [engine, setEngine] = useState<ABEngine | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [active, setActive] = useState<'A' | 'B'>('B');
+  const [vizMode, setVizMode] = useState<'frequency' | 'waveform'>('frequency');
+  const [loadedA, setLoadedA] = useState(false);
+  const [loadedB, setLoadedB] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [curTime, setCurTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [levels, setLevels] = useState({ l: 0, r: 0 });
+  const rafRef = useRef<number | null>(null);
+
+  // Initialise engine lazily on first client render.
+  useEffect(() => {
+    let eng: ABEngine | null = null;
+    try {
+      eng = new ABEngine();
+      setEngine(eng);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Web Audio unavailable');
     }
-  }, [active]);
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    setIsDragging(true);
-    seekTo(e.clientX);
-  };
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (isDragging) seekTo(e.clientX);
-  }, [isDragging, seekTo]);
-
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
+    return () => {
+      void eng?.close();
+    };
   }, []);
 
+  // Reload A/B buffers whenever URLs change.
   useEffect(() => {
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging, handleMouseMove, handleMouseUp]);
+    if (!engine) return;
+    let cancelled = false;
+    setLoadedA(false);
+    setLoadedB(false);
+    setError(null);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.code === 'Space') {
-        e.preventDefault();
-        setIsPlaying(p => !p);
+    (async () => {
+      try {
+        if (audioUrl) {
+          await engine.loadUrl(audioUrl, 'A');
+          if (cancelled) return;
+          setLoadedA(true);
+        }
+        if (masteredUrl) {
+          await engine.loadUrl(masteredUrl, 'B');
+          if (cancelled) return;
+          setLoadedB(true);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to decode audio.');
       }
-      if (e.code === 'KeyX') {
-        handleSwitch(activeTrack === 'A' ? 'B' : 'A');
-      }
+    })();
+
+    return () => {
+      cancelled = true;
     };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [activeTrack, handleSwitch]);
+  }, [engine, audioUrl, masteredUrl]);
 
-  const skip = (d: number) => {
-    const el = active.current;
-    if (el && el.duration) el.currentTime = Math.max(0, Math.min(el.duration, el.currentTime + d));
+  // Animation frame loop to sample transport + meters.
+  useEffect(() => {
+    if (!engine) return;
+    const tick = () => {
+      setCurTime(engine.getCurrentTime());
+      setDuration(engine.getDuration());
+      setLevels(engine.getMeter());
+      if (engine.isPlaying() !== isPlaying) setIsPlaying(engine.isPlaying());
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [engine, isPlaying]);
+
+  const toggle = useCallback(() => {
+    if (!engine) return;
+    if (engine.isPlaying()) engine.pause();
+    else engine.play();
+    setIsPlaying(engine.isPlaying());
+  }, [engine]);
+
+  const onSwitch = useCallback(
+    (side: 'A' | 'B') => {
+      setActive(side);
+      engine?.switchTo(side);
+    },
+    [engine],
+  );
+
+  const seek = useCallback(
+    (t: number) => {
+      engine?.seek(t);
+      setCurTime(t);
+    },
+    [engine],
+  );
+
+  const rewind = useCallback(() => {
+    engine?.seek(0);
+    setCurTime(0);
+  }, [engine]);
+
+  const fmt = (t: number) => {
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    const ms = Math.floor((t % 1) * 100);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(2, '0')}`;
   };
 
-  const fmt = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, '0')}`;
-  };
+  const colorA = '#6366f1'; // indigo
+  const colorB = '#10b981'; // emerald
+  const color = useMemo(() => (active === 'A' ? colorA : colorB), [active]);
+  const analyzer = engine?.analyzer ?? null;
+  const ready = loadedA && loadedB;
 
-  const isB = activeTrack === 'B';
+  if (error) {
+    return (
+      <div className="rounded-lg border border-red-900/60 bg-red-950/20 text-red-400 text-xs p-4 flex items-center gap-2 font-mono">
+        <AlertCircle className="w-4 h-4 shrink-0" />
+        <span className="truncate">{error}</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-xl overflow-hidden select-none" style={{ background: '#0a0a0c', border: '1px solid rgba(255,255,255,0.06)' }}>
-      {/* Header: A/B toggle */}
-      <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full" style={{ background: isB ? '#10b981' : '#a5a0ff', boxShadow: isB ? '0 0 8px rgba(16,185,129,0.4)' : '0 0 8px rgba(165,160,255,0.4)' }} />
-          <span className="text-[10px] font-mono uppercase tracking-[0.2em]" style={{ color: isB ? '#10b981' : '#a5a0ff' }}>
-            {isB ? 'Mastered' : 'Original'}
+    <div className="w-full rounded-xl border border-zinc-800 bg-zinc-950 overflow-hidden">
+      {/* Visualizer */}
+      <div className="relative aspect-[5/1] md:aspect-[6/1] w-full bg-black">
+        <div className="absolute top-3 left-4 z-10 flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-red-500 animate-pulse' : 'bg-zinc-600'}`} />
+          <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
+            {isPlaying ? 'live analysis' : ready ? 'standby' : 'loading…'}
           </span>
         </div>
-
-        <div className="flex items-center rounded-lg overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="absolute top-3 right-3 z-10 flex gap-1">
           <button
-            onClick={() => handleSwitch('A')}
-            disabled={!aReady}
-            className="relative px-5 py-1.5 text-[10px] font-mono uppercase tracking-wider transition-all duration-200"
-            style={{
-              background: !isB ? 'rgba(165,160,255,0.1)' : 'transparent',
-              color: !aReady ? '#222' : !isB ? '#a5a0ff' : '#444',
-            }}
+            onClick={() => setVizMode('frequency')}
+            className={`p-1.5 rounded-md transition-colors ${
+              vizMode === 'frequency'
+                ? 'bg-zinc-100 text-black'
+                : 'bg-black/40 text-zinc-500 hover:text-zinc-200'
+            }`}
+            aria-label="frequency view"
           >
-            A · Original
-            {!isB && <div className="absolute bottom-0 left-0 right-0 h-[2px]" style={{ background: '#a5a0ff' }} />}
+            <BarChart3 size={14} />
           </button>
-          <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.04)' }} />
           <button
-            onClick={() => handleSwitch('B')}
-            disabled={!bReady}
-            className="relative px-5 py-1.5 text-[10px] font-mono uppercase tracking-wider transition-all duration-200"
-            style={{
-              background: isB ? 'rgba(16,185,129,0.1)' : 'transparent',
-              color: !bReady ? '#222' : isB ? '#10b981' : '#444',
-            }}
+            onClick={() => setVizMode('waveform')}
+            className={`p-1.5 rounded-md transition-colors ${
+              vizMode === 'waveform'
+                ? 'bg-zinc-100 text-black'
+                : 'bg-black/40 text-zinc-500 hover:text-zinc-200'
+            }`}
+            aria-label="waveform view"
           >
-            B · Mastered
-            {isB && <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-emerald-500" />}
+            <Activity size={14} />
           </button>
         </div>
-      </div>
 
-      {!aReady && audioUrl && (
-        <div className="flex items-center gap-2 px-5 py-1.5 text-[10px] font-mono text-amber-500/60" style={{ background: 'rgba(255,170,0,0.02)' }}>
-          <AlertCircle className="w-3 h-3 shrink-0" />
-          Original audio unavailable (external URL may block cross-origin).
-        </div>
-      )}
+        <SpectrumCanvas analyzer={analyzer} color={color} mode={vizMode} />
 
-      {/* Waveform canvas */}
-      <div
-        ref={containerRef}
-        className="relative cursor-pointer group"
-        style={{ height: 120 }}
-        onMouseDown={handleMouseDown}
-      >
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full"
-        />
-
-        {/* Track label watermark */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <span
-            className="font-mono font-black uppercase tracking-[0.5em] transition-all duration-300"
-            style={{
-              fontSize: isSwitching ? 28 : 22,
-              color: isB ? 'rgba(16,185,129,0.06)' : 'rgba(165,160,255,0.06)',
-            }}
-          >
-            {isB ? 'MASTERED' : 'ORIGINAL'}
-          </span>
-        </div>
-
-        {/* Hover time indicator */}
-        {duration > 0 && (
-          <div className="absolute bottom-1 right-2 text-[9px] font-mono opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-            style={{ color: isB ? 'rgba(16,185,129,0.5)' : 'rgba(165,160,255,0.5)' }}>
-            {fmt(currentTime)} / {fmt(duration)}
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-center pointer-events-none">
+          <div className="text-2xl md:text-3xl font-mono font-bold tabular-nums text-zinc-100">
+            {fmt(curTime)}
           </div>
-        )}
+          <div className="text-[9px] font-mono text-zinc-500 tracking-[0.2em] uppercase">
+            / {fmt(duration)}
+          </div>
+        </div>
       </div>
 
-      {/* Transport bar */}
-      <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-        {/* Time */}
-        <div className="flex items-center gap-2 w-28">
-          <span className="text-xs font-mono tabular-nums font-bold" style={{ color: isB ? '#10b981' : '#a5a0ff' }}>
-            {fmt(currentTime)}
-          </span>
-          <span className="text-[10px] font-mono text-zinc-600">/</span>
-          <span className="text-[10px] font-mono tabular-nums text-zinc-600">
-            {duration ? fmt(duration) : '0:00'}
-          </span>
-        </div>
-
-        {/* Controls */}
-        <div className="flex items-center gap-4">
-          <button onClick={() => skip(-5)} className="text-zinc-500 hover:text-white transition-colors p-1">
-            <SkipBack className="w-4 h-4" />
+      {/* Transport */}
+      <div className="grid grid-cols-12 gap-4 p-4 items-center">
+        {/* Left: play controls */}
+        <div className="col-span-12 md:col-span-7 flex items-center gap-4">
+          <button
+            onClick={rewind}
+            disabled={!ready}
+            className="p-2 text-zinc-500 hover:text-zinc-100 disabled:opacity-40"
+            aria-label="rewind"
+          >
+            <RotateCcw size={18} />
           </button>
           <button
-            onClick={() => setIsPlaying(!isPlaying)}
-            disabled={!bReady}
-            className="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-20"
-            style={{
-              background: isB ? '#10b981' : '#a5a0ff',
-              boxShadow: isB ? '0 0 20px rgba(16,185,129,0.3)' : '0 0 20px rgba(165,160,255,0.3)',
-            }}
+            onClick={toggle}
+            disabled={!ready}
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+              isPlaying
+                ? 'bg-zinc-100 text-black'
+                : 'bg-emerald-500 text-black hover:scale-105 shadow-[0_0_24px_rgba(16,185,129,0.35)]'
+            } disabled:opacity-40 disabled:cursor-not-allowed`}
+            aria-label={isPlaying ? 'pause' : 'play'}
           >
-            {isPlaying
-              ? <Pause className="w-4 h-4" style={{ fill: '#0a0a0c', color: '#0a0a0c' }} />
-              : <Play className="w-4 h-4 ml-0.5" style={{ fill: '#0a0a0c', color: '#0a0a0c' }} />
-            }
+            {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} className="ml-0.5" fill="currentColor" />}
           </button>
-          <button onClick={() => skip(5)} className="text-zinc-500 hover:text-white transition-colors p-1">
-            <SkipForward className="w-4 h-4" />
-          </button>
-        </div>
 
-        {/* Volume + shortcuts hint */}
-        <div className="flex items-center gap-3 w-28 justify-end">
-          <button onClick={() => setIsMuted(!isMuted)} className="text-zinc-500 hover:text-white transition-colors">
-            {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-          </button>
           <input
             type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={isMuted ? 0 : volume}
-            onChange={(e) => { setVolume(parseFloat(e.target.value)); setIsMuted(false); }}
-            className="w-16 accent-zinc-500 h-1"
+            min={0}
+            max={duration || 1}
+            step={0.01}
+            value={Math.min(curTime, duration || 0)}
+            onChange={(e) => seek(parseFloat(e.target.value))}
+            disabled={!ready}
+            className="flex-1 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-500 disabled:opacity-40"
           />
+        </div>
+
+        {/* Middle: A/B switcher */}
+        <div className="col-span-6 md:col-span-3 flex items-center justify-center">
+          <div
+            role="tablist"
+            aria-label="A/B source switch"
+            className="relative w-32 h-9 rounded-full p-1 bg-zinc-900 border border-zinc-800"
+          >
+            <motion.div
+              layout
+              animate={{ left: active === 'A' ? '4px' : 'calc(50% - 4px)' }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+              className={`absolute top-1 bottom-1 w-1/2 rounded-full ${
+                active === 'A' ? 'bg-indigo-500' : 'bg-emerald-500'
+              }`}
+            />
+            <div className="relative grid grid-cols-2 h-full font-mono font-bold text-xs">
+              <button
+                role="tab"
+                aria-selected={active === 'A'}
+                onClick={() => onSwitch('A')}
+                className={`z-10 rounded-full transition-colors ${
+                  active === 'A' ? 'text-black' : 'text-zinc-500 hover:text-zinc-200'
+                }`}
+              >
+                BEFORE
+              </button>
+              <button
+                role="tab"
+                aria-selected={active === 'B'}
+                onClick={() => onSwitch('B')}
+                className={`z-10 rounded-full transition-colors ${
+                  active === 'B' ? 'text-black' : 'text-zinc-500 hover:text-zinc-200'
+                }`}
+              >
+                AFTER
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: L/R peak meters */}
+        <div className="col-span-6 md:col-span-2 flex items-center justify-end gap-3 h-12">
+          <PeakMeter level={levels.l} label="L" />
+          <PeakMeter level={levels.r} label="R" />
         </div>
       </div>
 
-      {/* Keyboard shortcut hint */}
-      <div className="px-5 pb-2 flex items-center gap-4 text-[9px] font-mono text-zinc-600">
-        <span><kbd className="px-1 py-0.5 rounded bg-zinc-800/50 text-zinc-500">Space</kbd> Play/Pause</span>
-        <span><kbd className="px-1 py-0.5 rounded bg-zinc-800/50 text-zinc-500">X</kbd> A/B Switch</span>
-      </div>
+      <AnimatePresence>
+        {!ready && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="px-4 pb-3 text-[10px] font-mono text-zinc-600"
+          >
+            decoding {!loadedA && 'BEFORE'} {!loadedA && !loadedB && '+'} {!loadedB && 'AFTER'}…
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
