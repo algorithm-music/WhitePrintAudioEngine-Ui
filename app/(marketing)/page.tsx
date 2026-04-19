@@ -207,7 +207,7 @@ function AppDashboardInner() {
             animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
             exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
             transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-            className="flex-1 flex items-center justify-center p-6"
+            className="flex-1 flex items-start justify-center px-6 pt-8 pb-24"
           >
             <AnalyzingScreen error={error} />
           </motion.div>
@@ -232,7 +232,7 @@ function AppDashboardInner() {
             animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
             exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
             transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-            className="flex-1 flex items-center justify-center p-6"
+            className="flex-1 flex items-start justify-center px-6 pt-8 pb-24"
           >
             <DeliberatingScreen error={error} />
           </motion.div>
@@ -257,7 +257,7 @@ function AppDashboardInner() {
             animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
             exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
             transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-            className="flex-1 flex items-center justify-center p-6"
+            className="flex-1 flex items-start justify-center px-6 pt-8 pb-24"
           >
             <MasteringScreen error={error} />
           </motion.div>
