@@ -158,7 +158,18 @@ function AppDashboardInner() {
     try {
       const result = await runMastering(audioUrl, deliberationResult);
       setMasteringResult(result);
-      setAppState('mastering_results');
+      // Stay on the deliberation screen — do NOT jump to a separate results
+      // page. Trigger a download in-place and let the user stay in context.
+      if (result.download_url && typeof document !== 'undefined') {
+        const a = document.createElement('a');
+        a.href = result.download_url;
+        a.download = 'mastered.wav';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      setAppState('deliberation_results');
       await updateJob(jobId, {
         status: 'completed',
         lufs_after: result.metrics.lufs_after,
