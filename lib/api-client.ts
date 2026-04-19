@@ -7,20 +7,36 @@ export class ApiError extends Error {
   }
 }
 
+const GCS_HOST_RE = /^https:\/\/storage\.googleapis\.com\/([^/?#]+)\/([^?#]+)/;
+
 /**
- * Callers historically pass `audio_url` as a string. After the GCS migration
- * that same field may hold a `gcs://<object-name>` synthetic URL (produced by
- * {@link uploadToGCS}) — in which case we rewrite the request body to use
- * `gcs_object` so the backend takes the in-bucket path.
+ * Browser code uploads to GCS via {@link uploadToGCS}, which returns a real
+ * HTTPS signed GET URL so the UI can play the audio directly. When that same
+ * URL flows back into `/api/master` as `audio_url`, we detect the GCS pattern
+ * here and rewrite it to `gcs_object` so the backend skips HTTP download and
+ * reads straight from its GCSFuse mount.
+ *
+ * The previous `gcs://<object>` synthetic scheme was rejected by browsers as
+ * ERR_UNKNOWN_URL_SCHEME when used as an <audio src>, so we no longer use it.
  */
 function normalizeInputFields(
   body: Record<string, unknown>,
 ): Record<string, unknown> {
   const a = body.audio_url;
-  if (typeof a === 'string' && a.startsWith('gcs://')) {
-    const rest = { ...body };
-    delete rest.audio_url;
-    return { ...rest, gcs_object: a.slice('gcs://'.length) };
+  if (typeof a === 'string') {
+    if (a.startsWith('gcs://')) {
+      const rest = { ...body };
+      delete rest.audio_url;
+      return { ...rest, gcs_object: a.slice('gcs://'.length) };
+    }
+    const m = GCS_HOST_RE.exec(a);
+    if (m) {
+      // m[1] = bucket, m[2] = object-path. Decode any %XX and drop the signed-URL query string.
+      const object = decodeURIComponent(m[2]);
+      const rest = { ...body };
+      delete rest.audio_url;
+      return { ...rest, gcs_object: object };
+    }
   }
   return body;
 }
@@ -62,11 +78,11 @@ export async function postMaster<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 /**
- * Get a V4 signed PUT URL from /api/presign-upload, then PUT the file
- * directly to GCS. Returns a synthetic `gcs://<object-name>` URL so callers
- * that previously plumbed a URL string (UploadScreen, HeroUrlInput, etc.)
- * can keep passing a single string unchanged; {@link postMaster} rewrites
- * `gcs://` into a `gcs_object` field before hitting the backend.
+ * Get a V4 signed PUT URL from /api/presign-upload, PUT the file directly to
+ * GCS, and return a real HTTPS signed GET URL for the same object so the UI
+ * can use it as an <audio src>. {@link postMaster} parses the GCS object
+ * name out of this URL before hitting the backend, so callers that used to
+ * plumb a URL string (UploadScreen, HeroUrlInput, …) keep the same contract.
  */
 export async function uploadToGCS(
   file: File,
@@ -92,8 +108,9 @@ export async function uploadToGCS(
     throw new ApiError(message, presignRes.status);
   }
 
-  const { upload_url, gcs_object, content_type } = (await presignRes.json()) as {
+  const { upload_url, download_url, content_type } = (await presignRes.json()) as {
     upload_url: string;
+    download_url: string;
     gcs_object: string;
     content_type: string;
   };
@@ -102,7 +119,7 @@ export async function uploadToGCS(
   // match what was signed; we just echo back what the presign route used.
   await putToGCS(upload_url, file, content_type, onProgress);
 
-  return `gcs://${gcs_object}`;
+  return download_url;
 }
 
 function putToGCS(

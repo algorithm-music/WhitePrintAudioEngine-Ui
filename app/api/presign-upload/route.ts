@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { generateUploadUrl, makeObjectName } from '@/lib/gcs';
+import {
+  generateDownloadUrl,
+  generateUploadUrl,
+  makeObjectName,
+} from '@/lib/gcs';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -34,10 +38,17 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     const gcsObject = makeObjectName('uploads', user?.id ?? null, filename);
-    const uploadUrl = await generateUploadUrl(gcsObject, contentType, 15);
+    const [uploadUrl, downloadUrl] = await Promise.all([
+      generateUploadUrl(gcsObject, contentType, 15),
+      generateDownloadUrl(gcsObject, 60),
+    ]);
 
     return NextResponse.json({
       upload_url: uploadUrl,
+      // Signed GET URL — the UI uses this as a real HTTPS src for audio
+      // preview elements (no custom scheme), while postMaster parses the
+      // object name out of it and sends that as `gcs_object` to the backend.
+      download_url: downloadUrl,
       gcs_object: gcsObject,
       expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
       content_type: contentType,
