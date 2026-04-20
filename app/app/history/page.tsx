@@ -22,6 +22,7 @@ type Job = {
   musical_key: string | null;
   duration_sec: number | null;
   output_url: string | null;
+  output_gcs_path: string | null;
   created_at: string;
   completed_at: string | null;
 };
@@ -43,7 +44,7 @@ export default function HistoryPage() {
 
       const { data } = await supabase
         .from('jobs')
-        .select('id, input_gcs_path, input_file_name, status, route, lufs_before, lufs_after, true_peak_before, true_peak_after, bpm, musical_key, duration_sec, created_at, completed_at, output_url')
+        .select('id, input_gcs_path, input_file_name, status, route, lufs_before, lufs_after, true_peak_before, true_peak_after, bpm, musical_key, duration_sec, created_at, completed_at, output_url, output_gcs_path')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(50);
@@ -219,15 +220,18 @@ export default function HistoryPage() {
                     {/* Expanded: A/B Player + Actions */}
                     {expandedJob === job.id && (
                       <div className="relative px-5 pb-5 pt-0 border-t border-zinc-800/50 space-y-4">
-                        {job.output_url && (
+                        {(job.output_gcs_path || job.output_url) && (
                           <div className="pt-4">
-                            <ABPlayer audioUrl={job.input_gcs_path} masteredUrl={job.output_url} />
+                            <ABPlayer 
+                              audioUrl={job.input_gcs_path} 
+                              masteredUrl={job.output_gcs_path ? `/api/download?path=${encodeURIComponent(job.output_gcs_path)}` : (job.output_url || '')} 
+                            />
                           </div>
                         )}
                         <div className="flex items-center gap-3 pt-2">
-                          {job.output_url && (
+                          {(job.output_gcs_path || job.output_url) && (
                             <a
-                              href={job.output_url}
+                              href={job.output_gcs_path ? `/api/download?path=${encodeURIComponent(job.output_gcs_path)}` : (job.output_url || '')}
                               download
                               className="inline-flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold text-white rounded-lg transition-colors bg-emerald-600 hover:bg-emerald-500"
                             >
@@ -245,7 +249,7 @@ export default function HistoryPage() {
                             </Link>
                           )}
                         </div>
-                        {!job.output_url && job.status === 'completed' && (
+                        {!(job.output_gcs_path || job.output_url) && job.status === 'completed' && (
                           <p className="text-xs text-zinc-600 font-mono">Analysis only — no mastered audio available.</p>
                         )}
                         {job.status === 'failed' && (

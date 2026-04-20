@@ -7,6 +7,32 @@ export class ApiError extends Error {
   }
 }
 
+async function fetchWithRetry(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  retries = 5,
+  backoff = 1000
+): Promise<Response> {
+  try {
+    const response = await fetch(input, init);
+    // Retry on 502, 503, 504
+    if (!response.ok && [502, 503, 504].includes(response.status) && retries > 0) {
+      console.warn(`HTTP ${response.status}. Retrying in ${backoff}ms...`);
+      await new Promise((res) => setTimeout(res, backoff));
+      return fetchWithRetry(input, init, retries - 1, Math.min(backoff * 1.5, 5000));
+    }
+    return response;
+  } catch (err) {
+    if (retries > 0) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`Fetch failed (${msg}). Retrying in ${backoff}ms...`);
+      await new Promise((res) => setTimeout(res, backoff));
+      return fetchWithRetry(input, init, retries - 1, Math.min(backoff * 1.5, 5000));
+    }
+    throw err;
+  }
+}
+
 const GCS_HOST_RE = /^https:\/\/storage\.googleapis\.com\/([^/?#]+)\/([^?#]+)/;
 
 /**
@@ -72,7 +98,7 @@ export async function submitMasterJob(
   const payload = normalizeInputFields(body);
   let res: Response;
   try {
-    res = await fetch('/api/master', {
+    res = await fetchWithRetry('/api/master', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -108,10 +134,15 @@ export async function pollJob(
   outputObject: string | null,
 ): Promise<JobStatus> {
   const qs = outputObject ? `?object=${encodeURIComponent(outputObject)}` : '';
-  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}${qs}`, {
-    method: 'GET',
-    cache: 'no-store',
-  });
+  let res: Response;
+  try {
+    res = await fetchWithRetry(`/api/jobs/${encodeURIComponent(jobId)}${qs}`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+  } catch (err) {
+    throw new ApiError(`Failed to reach backend: ${err instanceof Error ? err.message : String(err)}`, 502);
+  }
 
   if (!res.ok) {
     let message = `Backend error (${res.status})`;
@@ -176,14 +207,19 @@ export async function uploadToGCS(
   file: File,
   onProgress?: (pct: number) => void,
 ): Promise<string> {
-  const presignRes = await fetch('/api/presign-upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      filename: file.name,
-      content_type: file.type || 'application/octet-stream',
-    }),
-  });
+  let presignRes: Response;
+  try {
+    presignRes = await fetchWithRetry('/api/presign-upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: file.name,
+        content_type: file.type || 'application/octet-stream',
+      }),
+    });
+  } catch (err) {
+    throw new ApiError(`Failed to reach backend: ${err instanceof Error ? err.message : String(err)}`, 502);
+  }
 
   if (!presignRes.ok) {
     let message = `Presign failed (${presignRes.status})`;

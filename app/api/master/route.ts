@@ -28,7 +28,7 @@ const FREE_TRACKS_LIMIT = 3;
  * The browser submits once, then polls every few seconds. No long-lived
  * connections, no keep-alive gymnastics.
  */
-export const maxDuration = 30;
+export const maxDuration = 800;
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
@@ -176,6 +176,29 @@ export async function POST(request: NextRequest) {
       status: string;
       route: string;
     };
+
+    // Save output_gcs_path and route to DB using Service Role Key to ensure it's written
+    if (data.job_id) {
+      try {
+        const { createClient: createAdminClient } = await import('@supabase/supabase-js');
+        const adminSupabase = createAdminClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        );
+        
+        const updatePayload: Record<string, any> = { route: route };
+        if (outputObject) {
+          updatePayload.output_gcs_path = outputObject;
+        }
+
+        await adminSupabase
+          .from('jobs')
+          .update(updatePayload)
+          .eq('id', data.job_id);
+      } catch (err) {
+        console.error('Failed to update job details:', err);
+      }
+    }
 
     // Count the track as used at submit time. Jobs that later fail won't
     // decrement, which is consistent with how the sync path behaved after

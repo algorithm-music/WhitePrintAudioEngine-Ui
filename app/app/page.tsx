@@ -21,8 +21,8 @@ import ABPlayer from '@/components/ab-player';
 type Job = {
   id: string;
   input_file_name: string | null;
-  input_gcs_path: string | null;
   output_url: string | null;
+  output_gcs_path: string | null;
   status: string;
   route: string | null;
   lufs_before: number | null;
@@ -89,7 +89,7 @@ export default function DashboardPage() {
       setAuthed(true);
       const { data } = await supabase
         .from('jobs')
-        .select('id, input_gcs_path, input_file_name, output_url, status, route, lufs_before, lufs_after, true_peak_before, true_peak_after, bpm, duration_sec, created_at, completed_at')
+        .select('id, input_gcs_path, input_file_name, output_url, output_gcs_path, status, route, lufs_before, lufs_after, true_peak_before, true_peak_after, bpm, duration_sec, created_at, completed_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(30);
@@ -104,7 +104,7 @@ export default function DashboardPage() {
     if (!user) return;
     const { data } = await supabase
       .from('jobs')
-      .select('id, input_gcs_path, input_file_name, output_url, status, route, lufs_before, lufs_after, true_peak_before, true_peak_after, bpm, duration_sec, created_at, completed_at')
+      .select('id, input_gcs_path, input_file_name, output_url, output_gcs_path, status, route, lufs_before, lufs_after, true_peak_before, true_peak_after, bpm, duration_sec, created_at, completed_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(30);
@@ -178,42 +178,49 @@ export default function DashboardPage() {
     if (!pollKey) return;
 
     let cancelled = false;
+    let isTicking = false;
     const tick = async () => {
-      const active = runsRef.current.filter(
-        (r) => r.status === 'processing' && r.jobId,
-      );
-      for (const r of active) {
-        if (cancelled || !r.jobId) continue;
-        try {
-          const job = await pollJob(r.jobId, r.outputObject ?? null);
-          if (cancelled) return;
-          if (job.status === 'completed') {
-            updateRun(r.localId, {
-              status: 'done',
-              downloadUrl: job.download_url ?? undefined,
-              expanded: true,
-            });
-            void refreshJobs();
-          } else if (job.status === 'failed') {
-            updateRun(r.localId, {
-              status: 'error',
-              error: job.error || 'Pipeline failed.',
-            });
-          }
-          // queued / processing → keep counter ticking; try again next interval.
-        } catch (err) {
-          // Transient poll errors shouldn't kill the run. Only 404 (job
-          // evicted server-side) means we should give up.
-          if (err instanceof ApiError && err.status === 404) {
-            updateRun(r.localId, {
-              status: 'error',
-              error: 'Job expired before finishing.',
-            });
-          } else {
-            // eslint-disable-next-line no-console
-            console.warn('[poll] transient error, retrying:', err);
+      if (isTicking) return;
+      isTicking = true;
+      try {
+        const active = runsRef.current.filter(
+          (r) => r.status === 'processing' && r.jobId,
+        );
+        for (const r of active) {
+          if (cancelled || !r.jobId) continue;
+          try {
+            const job = await pollJob(r.jobId, r.outputObject ?? null);
+            if (cancelled) return;
+            if (job.status === 'completed') {
+              updateRun(r.localId, {
+                status: 'done',
+                downloadUrl: job.download_url ?? undefined,
+                expanded: true,
+              });
+              void refreshJobs();
+            } else if (job.status === 'failed') {
+              updateRun(r.localId, {
+                status: 'error',
+                error: job.error || 'Pipeline failed.',
+              });
+            }
+            // queued / processing → keep counter ticking; try again next interval.
+          } catch (err) {
+            // Transient poll errors shouldn't kill the run. Only 404 (job
+            // evicted server-side) means we should give up.
+            if (err instanceof ApiError && err.status === 404) {
+              updateRun(r.localId, {
+                status: 'error',
+                error: 'Job expired before finishing.',
+              });
+            } else {
+              // eslint-disable-next-line no-console
+              console.warn('[poll] transient error, retrying:', err);
+            }
           }
         }
+      } finally {
+        isTicking = false;
       }
     };
 
@@ -371,10 +378,10 @@ export default function DashboardPage() {
                           then morphs into a download button when it finishes. */}
                       <div className="relative w-32 h-8 shrink-0">
                         <AnimatePresence mode="wait" initial={false}>
-                          {r.status === 'done' && r.downloadUrl ? (
+                          {r.status === 'done' && (r.outputObject || r.downloadUrl) ? (
                             <motion.a
                               key="dl"
-                              href={r.downloadUrl}
+                              href={r.outputObject ? `/api/download?path=${encodeURIComponent(r.outputObject)}` : r.downloadUrl!}
                               download={r.filename.replace(/\.[^.]+$/, '') + '-mastered.wav'}
                               initial={{ opacity: 0, y: 6, scale: 0.96 }}
                               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -418,9 +425,9 @@ export default function DashboardPage() {
                         </button>
                       )}
                     </div>
-                    {canCompare && r.expanded && r.inputUrl && r.downloadUrl && (
+                    {r.status === 'done' && r.expanded && r.inputUrl && (r.outputObject || r.downloadUrl) && (
                       <div className="px-4 pb-4">
-                        <ABPlayer audioUrl={r.inputUrl} masteredUrl={r.downloadUrl} />
+                        <ABPlayer audioUrl={r.inputUrl} masteredUrl={r.outputObject ? `/api/download?path=${encodeURIComponent(r.outputObject)}` : r.downloadUrl!} />
                       </div>
                     )}
                   </motion.div>
@@ -457,9 +464,9 @@ export default function DashboardPage() {
                         {j.bpm ? ` · ${j.bpm} BPM` : ''}
                       </div>
                     </div>
-                    {done && j.output_url && (
+                    {done && (j.output_gcs_path || j.output_url) && (
                       <a
-                        href={j.output_url}
+                        href={j.output_gcs_path ? `/api/download?path=${encodeURIComponent(j.output_gcs_path)}` : (j.output_url || '')}
                         download
                         className="flex items-center gap-1 text-xs font-mono text-emerald-400 hover:text-emerald-300 shrink-0"
                       >
