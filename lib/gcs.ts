@@ -69,15 +69,22 @@ export async function generateUploadUrl(
 export async function generateDownloadUrl(
   objectName: string,
   expiresMinutes = 60,
+  filename?: string,
 ): Promise<string> {
+  const options: any = {
+    version: 'v4',
+    action: 'read',
+    expires: Date.now() + expiresMinutes * 60 * 1000,
+  };
+  
+  if (filename) {
+    options.responseDisposition = `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`;
+  }
+
   const [url] = await getStorage()
     .bucket(GCS_BUCKET)
     .file(objectName)
-    .getSignedUrl({
-      version: 'v4',
-      action: 'read',
-      expires: Date.now() + expiresMinutes * 60 * 1000,
-    });
+    .getSignedUrl(options);
   return url;
 }
 

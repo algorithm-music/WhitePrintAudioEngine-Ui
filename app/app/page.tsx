@@ -381,7 +381,7 @@ export default function DashboardPage() {
                           {r.status === 'done' && (r.outputObject || r.downloadUrl) ? (
                             <motion.a
                               key="dl"
-                              href={r.outputObject ? `/api/download?path=${encodeURIComponent(r.outputObject)}` : r.downloadUrl!}
+                              href={r.outputObject ? `/api/download?path=${encodeURIComponent(r.outputObject)}&filename=${encodeURIComponent(r.filename.replace(/\.[^.]+$/, '') + '-mastered.wav')}` : r.downloadUrl!}
                               download={r.filename.replace(/\.[^.]+$/, '') + '-mastered.wav'}
                               initial={{ opacity: 0, y: 6, scale: 0.96 }}
                               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -452,6 +452,7 @@ export default function DashboardPage() {
                     ? 'text-red-400'
                     : 'text-amber-400';
                 const title = j.input_file_name || `TRACK-${j.id.substring(0, 8).toUpperCase()}`;
+                const outFilename = title.replace(/\.[^.]+$/, '') + '-mastered.wav';
                 return (
                   <div key={j.id} className="flex items-center gap-4 px-4 py-3 text-sm">
                     <Icon className={`w-4 h-4 shrink-0 ${color}`} />
@@ -466,7 +467,7 @@ export default function DashboardPage() {
                     </div>
                     {done && (j.output_gcs_path || j.output_url) && (
                       <a
-                        href={j.output_gcs_path ? `/api/download?path=${encodeURIComponent(j.output_gcs_path)}` : (j.output_url || '')}
+                        href={j.output_gcs_path ? `/api/download?path=${encodeURIComponent(j.output_gcs_path)}&filename=${encodeURIComponent(outFilename)}` : (j.output_url || '')}
                         download
                         className="flex items-center gap-1 text-xs font-mono text-emerald-400 hover:text-emerald-300 shrink-0"
                       >

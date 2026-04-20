@@ -231,7 +231,7 @@ export default function HistoryPage() {
                         <div className="flex items-center gap-3 pt-2">
                           {(job.output_gcs_path || job.output_url) && (
                             <a
-                              href={job.output_gcs_path ? `/api/download?path=${encodeURIComponent(job.output_gcs_path)}` : (job.output_url || '')}
+                              href={job.output_gcs_path ? `/api/download?path=${encodeURIComponent(job.output_gcs_path)}&filename=${encodeURIComponent(getDisplayName(job).replace(/\.[^.]+$/, '') + '-mastered.wav')}` : (job.output_url || '')}
                               download
                               className="inline-flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold text-white rounded-lg transition-colors bg-emerald-600 hover:bg-emerald-500"
                             >
