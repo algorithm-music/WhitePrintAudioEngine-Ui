@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { submitMasterJob, pollJob, uploadToGCS, ApiError } from '@/lib/api-client';
+import { runDeliberation } from '@/lib/deliberation';
 import ABPlayer from '@/components/ab-player';
 
 type Job = {
@@ -145,9 +146,18 @@ export default function DashboardPage() {
       const gcsUrl = await uploadToGCS(file);
       updateRun(localId, { status: 'processing', inputUrl: gcsUrl });
 
+      // Sage deliberation must run before the DSP stage. Without it the
+      // backend falls back to generic defaults and the output audibly
+      // regresses vs. the narrative flow (manual_params + per-track
+      // loudness targets chosen by the AI panel).
+      const deliberation = await runDeliberation(gcsUrl);
+
       const submit = await submitMasterJob({
         audio_url: gcsUrl,
-        route: 'full',
+        route: 'dsp_only',
+        manual_params: deliberation.adopted_params,
+        target_lufs: deliberation.target_lufs,
+        target_true_peak: deliberation.target_true_peak,
       });
       updateRun(localId, {
         jobId: submit.job_id,
