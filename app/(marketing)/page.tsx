@@ -135,12 +135,16 @@ function AppDashboardInner() {
     setError(null);
   };
 
-  const handleRunDeliberation = async (targetLufs: number = -14.0, targetTruePeak: number = -1.0) => {
+  const handleRunDeliberation = async (platform?: string, customOverride?: { lufs: number; truePeak: number }) => {
     if (!analysisResult || !audioUrl) return;
     setAppState('deliberating');
     setError(null);
     try {
-      const result = await runDeliberation(audioUrl, targetLufs, targetTruePeak);
+      const result = await runDeliberation(audioUrl, {
+        platform,
+        targetLufs: customOverride?.lufs,
+        targetTruePeak: customOverride?.truePeak,
+      });
       setDeliberationResult(result);
       setAppState('deliberation_results');
     } catch (err) {

@@ -9,15 +9,20 @@ import PlatformSelector from '@/components/platform-selector';
 
 interface ResultsDashboardProps {
   data: AnalysisResult;
-  onRunDeliberation?: (targetLufs: number, targetTruePeak: number) => void;
+  /**
+   * Fires with the chosen platform id (e.g. "spotify"). Numeric loudness
+   * targets are decided by Sage, not the UI — the only exception is the
+   * "custom" platform, where the caller gets explicit overrides.
+   */
+  onRunDeliberation?: (platformId: string, customOverride?: { lufs: number; truePeak: number }) => void;
   audioUrl?: string | null;
   onReset?: () => void;
 }
 
 export default function ResultsDashboard({ data, onRunDeliberation, audioUrl, onReset }: ResultsDashboardProps) {
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
-  const [targetLufs, setTargetLufs] = useState(-14.0);
-  const [targetTruePeak, setTargetTruePeak] = useState(-1.0);
+  const [selectedPlatform, setSelectedPlatform] = useState<string>('spotify');
+  const [customOverride, setCustomOverride] = useState<{ lufs: number; truePeak: number } | null>(null);
   const [showPlatformModal, setShowPlatformModal] = useState(false);
   const [selectedSection, setSelectedSection] = useState<number | null>(null);
   const [playbackTime, setPlaybackTime] = useState<number | null>(null);
@@ -50,9 +55,9 @@ export default function ResultsDashboard({ data, onRunDeliberation, audioUrl, on
     }
   }, [isPlaying]);
 
-  const handlePlatformSelect = useCallback((lufs: number, truePeak: number) => {
-    setTargetLufs(lufs);
-    setTargetTruePeak(truePeak);
+  const handlePlatformSelect = useCallback((platformId: string, override?: { lufs: number; truePeak: number }) => {
+    setSelectedPlatform(platformId);
+    setCustomOverride(override ?? null);
   }, []);
   const track_identity = data?.track_identity ?? { duration_sec: 0, sample_rate: 0, bpm: null, key: null, bit_depth: 0 };
   const whole_track_metrics = data?.whole_track_metrics ?? {} as any;
@@ -174,7 +179,7 @@ export default function ResultsDashboard({ data, onRunDeliberation, audioUrl, on
                       Cancel
                     </button>
                     <button
-                      onClick={() => { setShowPlatformModal(false); onRunDeliberation(targetLufs, targetTruePeak); }}
+                      onClick={() => { setShowPlatformModal(false); onRunDeliberation(selectedPlatform, customOverride ?? undefined); }}
                       className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold transition-colors"
                     >
                       <BrainCircuit className="w-4 h-4" />

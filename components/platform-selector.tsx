@@ -22,20 +22,26 @@ export const PLATFORMS: PlatformTarget[] = [
 ];
 
 interface PlatformSelectorProps {
-  onSelect: (lufs: number, truePeak: number) => void;
+  /**
+   * Called with the platform id. The AI panel uses the id as deliberation
+   * context; it decides the actual LUFS / True-Peak targets per track.
+   * For `custom`, caller receives explicit numeric overrides as well.
+   */
+  onSelect: (platformId: string, customOverride?: { lufs: number; truePeak: number }) => void;
+  initialId?: string;
 }
 
-export default function PlatformSelector({ onSelect }: PlatformSelectorProps) {
-  const [selected, setSelected] = useState<string>('spotify');
+export default function PlatformSelector({ onSelect, initialId = 'spotify' }: PlatformSelectorProps) {
+  const [selected, setSelected] = useState<string>(initialId);
   const [customLufs, setCustomLufs] = useState(-14.0);
   const [customPeak, setCustomPeak] = useState(-1.0);
 
   const handleSelect = (platform: PlatformTarget) => {
     setSelected(platform.id);
     if (platform.id === 'custom') {
-      onSelect(customLufs, customPeak);
+      onSelect('custom', { lufs: customLufs, truePeak: customPeak });
     } else {
-      onSelect(platform.lufs, platform.truePeak);
+      onSelect(platform.id);
     }
   };
 
@@ -67,7 +73,7 @@ export default function PlatformSelector({ onSelect }: PlatformSelectorProps) {
             <input
               type="number"
               value={customLufs}
-              onChange={(e) => { const v = parseFloat(e.target.value); setCustomLufs(v); onSelect(v, customPeak); }}
+              onChange={(e) => { const v = parseFloat(e.target.value); setCustomLufs(v); onSelect('custom', { lufs: v, truePeak: customPeak }); }}
               step={0.5}
               className="w-20 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-indigo-500"
             />
@@ -77,7 +83,7 @@ export default function PlatformSelector({ onSelect }: PlatformSelectorProps) {
             <input
               type="number"
               value={customPeak}
-              onChange={(e) => { const v = parseFloat(e.target.value); setCustomPeak(v); onSelect(customLufs, v); }}
+              onChange={(e) => { const v = parseFloat(e.target.value); setCustomPeak(v); onSelect('custom', { lufs: customLufs, truePeak: v }); }}
               step={0.1}
               className="w-20 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-indigo-500"
             />

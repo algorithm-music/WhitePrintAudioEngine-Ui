@@ -18,6 +18,7 @@ import {
 import { submitMasterJob, pollJob, uploadToGCS, ApiError } from '@/lib/api-client';
 import { runDeliberation } from '@/lib/deliberation';
 import ABPlayer from '@/components/ab-player';
+import PlatformSelector, { PLATFORMS } from '@/components/platform-selector';
 
 type Job = {
   id: string;
@@ -74,6 +75,14 @@ export default function DashboardPage() {
   const [runs, setRuns] = useState<LocalRun[]>([]);
   const runsRef = useRef<LocalRun[]>([]);
   runsRef.current = runs;
+  // Platform the Sage panel deliberates *for*. We forward the id only;
+  // LUFS / True-Peak targets are the AI's call. Custom is the sole path
+  // that overrides those numbers from the UI.
+  const [platform, setPlatform] = useState<string>('spotify');
+  const [customOverride, setCustomOverride] = useState<{ lufs: number; truePeak: number } | null>(null);
+  const [showPlatformModal, setShowPlatformModal] = useState(false);
+  const platformRef = useRef({ platform, customOverride });
+  platformRef.current = { platform, customOverride };
 
   useEffect(() => {
     (async () => {
@@ -150,7 +159,16 @@ export default function DashboardPage() {
       // backend falls back to generic defaults and the output audibly
       // regresses vs. the narrative flow (manual_params + per-track
       // loudness targets chosen by the AI panel).
-      const deliberation = await runDeliberation(gcsUrl);
+      //
+      // We forward only the platform id as context — Sage decides the
+      // loudness / true-peak targets. `custom` is the one platform where
+      // the UI supplies explicit numeric overrides.
+      const { platform: platformNow, customOverride: overrideNow } = platformRef.current;
+      const deliberation = await runDeliberation(gcsUrl, {
+        platform: platformNow,
+        targetLufs: overrideNow?.lufs,
+        targetTruePeak: overrideNow?.truePeak,
+      });
 
       const submit = await submitMasterJob({
         audio_url: gcsUrl,
@@ -288,8 +306,23 @@ export default function DashboardPage() {
                 You don&apos;t have to watch — the run finishes in the background and downloads itself when done.
               </div>
             </div>
-            <div className="text-xs font-mono text-zinc-500">
-              WAV · FLAC · AIFF · MP3
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowPlatformModal(true)}
+                className="flex items-center gap-2 text-xs font-mono text-zinc-300 hover:text-white px-3 py-1.5 rounded border border-zinc-800 hover:border-indigo-500/60 bg-zinc-900/40 transition-colors"
+                aria-label="Change target platform"
+              >
+                <span className="text-zinc-500">TARGET</span>
+                <span className="text-indigo-400 font-semibold">
+                  {(PLATFORMS.find((p) => p.id === platform)?.name ?? platform).toUpperCase()}
+                </span>
+                {platform === 'custom' && customOverride && (
+                  <span className="text-zinc-500">· {customOverride.lufs} LUFS / {customOverride.truePeak} dBTP</span>
+                )}
+              </button>
+              <div className="text-xs font-mono text-zinc-500">
+                WAV · FLAC · AIFF · MP3
+              </div>
             </div>
           </div>
 
@@ -313,6 +346,31 @@ export default function DashboardPage() {
             />
           </label>
         </section>
+
+        {showPlatformModal && (
+          <>
+            <div className="fixed inset-0 bg-black/70 z-50" onClick={() => setShowPlatformModal(false)} />
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-2xl p-6 space-y-4 shadow-2xl">
+                <PlatformSelector
+                  initialId={platform}
+                  onSelect={(id, override) => {
+                    setPlatform(id);
+                    setCustomOverride(override ?? null);
+                  }}
+                />
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setShowPlatformModal(false)}
+                    className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* RUN LIST — fire-and-forget pipeline status, inline with history */}
         <section>
