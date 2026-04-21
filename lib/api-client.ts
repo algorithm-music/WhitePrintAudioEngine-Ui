@@ -153,10 +153,21 @@ export async function pollJob(
     } catch {
       /* response body was not JSON */
     }
+    const lower = message.toLowerCase();
+    if (lower.includes('timeout') || lower.includes('timed out')) {
+      message = 'Processing timed out. Try a shorter track.';
+    }
     throw new ApiError(message, res.status);
   }
 
-  return res.json() as Promise<JobStatus>;
+  const job = await res.json() as JobStatus;
+  if (job.status === 'failed' && job.error) {
+    const lower = job.error.toLowerCase();
+    if (lower.includes('timeout') || lower.includes('timed out')) {
+      job.error = 'Processing timed out. Try a shorter track.';
+    }
+  }
+  return job;
 }
 
 /**
@@ -168,8 +179,8 @@ export async function pollJob(
 export async function postMaster<T>(body: Record<string, unknown>): Promise<T> {
   const submit = await submitMasterJob(body);
 
-  // Poll until terminal. Cap at ~15 min so a wedged job doesn't pin a tab.
-  const deadline = Date.now() + 15 * 60 * 1000;
+  // Poll until terminal. Cap at ~30 min so a wedged job doesn't pin a tab.
+  const deadline = Date.now() + 30 * 60 * 1000;
   // eslint-disable-next-line no-constant-condition
   while (true) {
     if (Date.now() > deadline) {

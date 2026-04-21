@@ -61,6 +61,22 @@ export default function QuickstartPage() {
         </div>
 
         <div>
+          <h2 className="text-xl font-bold text-white mb-4">4. Polling for Results</h2>
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-400">
+              Check the status of your mastering job by polling the jobs endpoint:
+            </p>
+            <pre className="p-4 bg-zinc-950 rounded-lg border border-zinc-800 font-mono text-sm text-emerald-400 overflow-x-auto whitespace-pre-wrap">
+              {`curl -X GET "https://aimastering.tech/api/jobs/<job_id>?object=<output_object>" \\
+  -H "Authorization: Bearer wpk_YOUR_API_KEY"`}
+            </pre>
+            <p className="text-sm text-zinc-400">
+              When the status becomes <code className="text-indigo-400">completed</code>, you will receive a download URL and processing metrics.
+            </p>
+          </div>
+        </div>
+
+        <div>
           <h2 className="text-xl font-bold text-white mb-4">5. Response Headers</h2>
           <p className="text-sm text-zinc-400 mb-4">
             All routes return useful metadata in response headers:

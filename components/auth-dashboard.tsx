@@ -26,6 +26,7 @@ type Job = {
   consensus_opinions: Record<string, unknown> | null;
   analysis_data: Record<string, unknown> | null;
   output_url: string | null;
+  output_gcs_path: string | null;
 };
 
 type AuthDashboardContentProps = {
@@ -45,7 +46,7 @@ export default function AuthDashboardContent({ user, onSubmit, error }: AuthDash
       const supabase = createClient();
       const { data } = await supabase
         .from('jobs')
-        .select('id, input_gcs_path, input_file_name, status, route, lufs_before, lufs_after, true_peak_before, true_peak_after, bpm, musical_key, duration_sec, created_at, completed_at, consensus_opinions, analysis_data, output_url')
+        .select('id, input_gcs_path, input_file_name, status, route, lufs_before, lufs_after, true_peak_before, true_peak_after, bpm, musical_key, duration_sec, created_at, completed_at, consensus_opinions, analysis_data, output_url, output_gcs_path')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(10);
@@ -231,21 +232,29 @@ export default function AuthDashboardContent({ user, onSubmit, error }: AuthDash
                         </div>
 
                         {/* A/B Player */}
-                        {job.status === 'completed' && job.output_url && (
-                          <div className="mt-4 space-y-3">
-                            <ABPlayer audioUrl={job.input_gcs_path} masteredUrl={job.output_url} />
-                            <div className="flex justify-end">
-                              <a
-                                href={job.output_url}
-                                download
-                                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold text-white rounded-lg transition-colors bg-emerald-600 hover:bg-emerald-500"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                Download Master
-                              </a>
+                        {job.status === 'completed' && (job.output_gcs_path || job.output_url) && (() => {
+                          const masteredUrl = job.output_gcs_path
+                            ? `/api/download?path=${encodeURIComponent(job.output_gcs_path)}`
+                            : (job.output_url || '');
+                          const downloadHref = job.output_gcs_path
+                            ? `/api/download?path=${encodeURIComponent(job.output_gcs_path)}&filename=${encodeURIComponent(getDisplayName(job).replace(/\.[^.]+$/, '') + '-mastered.wav')}`
+                            : (job.output_url || '');
+                          return (
+                            <div className="mt-4 space-y-3">
+                              <ABPlayer audioUrl={job.input_gcs_path} masteredUrl={masteredUrl} />
+                              <div className="flex justify-end">
+                                <a
+                                  href={downloadHref}
+                                  download
+                                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold text-white rounded-lg transition-colors bg-emerald-600 hover:bg-emerald-500"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  Download Master
+                                </a>
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
 
                         {/* Consensus opinions (deliberation log) */}
                         {job.consensus_opinions && (

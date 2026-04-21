@@ -46,9 +46,44 @@ export async function POST(request: NextRequest) {
       route === 'full' || route === 'dsp_only' || !body.route;
 
     const supabase = await createClient();
-    const {
+    let {
       data: { user },
     } = await supabase.auth.getUser();
+
+    // Check for API key in headers if not logged in via session
+    const authHeader = request.headers.get('authorization');
+    if (!user && authHeader && authHeader.startsWith('Bearer wpk_')) {
+      const rawKey = authHeader.replace('Bearer ', '').trim();
+      const encoder = new TextEncoder();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(rawKey));
+      const keyHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+      const { createClient: createAdminClient } = await import('@supabase/supabase-js');
+      const adminSupabase = createAdminClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      const { data: apiKey } = await adminSupabase
+        .from('api_keys')
+        .select('id, user_id, is_active')
+        .eq('key_hash', keyHash)
+        .single();
+
+      if (apiKey && apiKey.is_active) {
+        // Set user context to the owner of the API key
+        user = { id: apiKey.user_id } as any;
+
+        // Update last_used_at (non-blocking)
+        adminSupabase
+          .from('api_keys')
+          .update({ last_used_at: new Date().toISOString() })
+          .eq('id', apiKey.id)
+          .then();
+      } else {
+        return NextResponse.json({ error: 'Invalid or revoked API key' }, { status: 401 });
+      }
+    }
 
     // Billing gate (mastering routes only)
     if (isMasteringRoute && user) {

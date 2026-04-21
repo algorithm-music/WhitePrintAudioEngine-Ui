@@ -18,7 +18,7 @@ const marketingNavItems = [
 const appNavItems = [
   { href: '/', label: 'DASHBOARD' },
   { href: '/app/history', label: 'HISTORY' },
-  { href: '/developers/docs', label: 'API_DOCS' },
+  { href: '/api-docs', label: 'API_DOCS' },
 ];
 
 export default function MarketingHeader({ children }: { children?: React.ReactNode }) {

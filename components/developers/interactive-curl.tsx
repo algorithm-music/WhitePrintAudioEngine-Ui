@@ -11,20 +11,19 @@ export default function InteractiveCurl() {
   const curl = useMemo(() => {
     const key = apiKey.trim() || 'YOUR_API_KEY';
     const url = audioUrl.trim() || 'https://your-storage.com/track.wav';
-    return `curl -X POST https://concertmaster.aimastering.tech/api/v1/jobs/master \\
-  -H "X-Api-Key: ${key}" \\
+    return `curl -X POST https://aimastering.tech/api/master \\
+  -H "Authorization: Bearer wpk_${key.replace(/^wpk_/, '')}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "audio_url": "${url}",
     "route": "full",
     "target_lufs": -14.0,
     "target_true_peak": -1.0
-  }' \\
-  -o mastered.wav`;
+  }'`;
   }, [apiKey, audioUrl]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(curl).catch(() => {});
+    navigator.clipboard.writeText(curl).catch(() => { });
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

@@ -24,21 +24,21 @@ interface ABPlayerProps {
   masteredUrl: string | null;
 }
 
-// ─── Web Audio engine (ported from Yomibito-Shirazu-jp/MasteringVisualizer) ──
+// ─── Web Audio engine ────────────────────────────────────────────────────────
+// Plays exactly ONE side at a time. A/B switch during playback stops the
+// current source and starts the other one at the same offset — no dual
+// playback, no comb-filter smearing, no crossfade artefacts.
 class ABEngine {
-  private context: AudioContext;
+  public context: AudioContext;
   analyzer: AnalyserNode;
-  private gainNode: GainNode;
+  public gainNode: GainNode;
   private splitter: ChannelSplitterNode;
   private meterL: AnalyserNode;
   private meterR: AnalyserNode;
 
   private bufferA: AudioBuffer | null = null;
   private bufferB: AudioBuffer | null = null;
-  private sourceA: AudioBufferSourceNode | null = null;
-  private sourceB: AudioBufferSourceNode | null = null;
-  private gainA: GainNode | null = null;
-  private gainB: GainNode | null = null;
+  private source: AudioBufferSourceNode | null = null;
 
   private startCtxTime = 0;
   private offset = 0;
@@ -79,7 +79,13 @@ class ABEngine {
     else this.bufferB = audioBuffer;
   }
 
+  private activeBuffer(): AudioBuffer | null {
+    return this.active === 'A' ? this.bufferA : this.bufferB;
+  }
+
   getDuration(): number {
+    const b = this.activeBuffer();
+    if (b) return b.duration;
     return Math.max(this.bufferA?.duration ?? 0, this.bufferB?.duration ?? 0);
   }
 
@@ -106,72 +112,49 @@ class ABEngine {
     return { l: peak(this.meterL), r: peak(this.meterR) };
   }
 
-  private teardown() {
-    if (this.sourceA) {
-      try { this.sourceA.stop(); } catch {}
-      this.sourceA.disconnect();
-      this.sourceA = null;
-    }
-    if (this.sourceB) {
-      try { this.sourceB.stop(); } catch {}
-      this.sourceB.disconnect();
-      this.sourceB = null;
-    }
-    if (this.gainA) { this.gainA.disconnect(); this.gainA = null; }
-    if (this.gainB) { this.gainB.disconnect(); this.gainB = null; }
+  private stopSource() {
+    if (!this.source) return;
+    try { this.source.onended = null; } catch {}
+    try { this.source.stop(); } catch {}
+    try { this.source.disconnect(); } catch {}
+    this.source = null;
+  }
+
+  /** Start the active buffer at `this.offset`. Assumes caller set `playing`. */
+  private startActive() {
+    const buffer = this.activeBuffer();
+    if (!buffer) return;
+    const src = this.context.createBufferSource();
+    src.buffer = buffer;
+    src.connect(this.gainNode);
+    const startAt = Math.max(0, Math.min(buffer.duration, this.offset));
+    src.start(0, startAt);
+    this.startCtxTime = this.context.currentTime - startAt;
+    src.onended = () => {
+      // Natural end only — manual stops clear onended first.
+      if (this.source === src) {
+        this.playing = false;
+        this.offset = 0;
+        this.source = null;
+      }
+    };
+    this.source = src;
   }
 
   play(): void {
     if (this.playing) return;
-    if (!this.bufferA && !this.bufferB) return;
+    if (!this.activeBuffer()) return;
     if (this.context.state === 'suspended') void this.context.resume();
 
-    this.teardown();
-    this.gainA = this.context.createGain();
-    this.gainB = this.context.createGain();
-    this.gainA.connect(this.gainNode);
-    this.gainB.connect(this.gainNode);
-    this.gainA.gain.value = this.active === 'A' ? 1 : 0;
-    this.gainB.gain.value = this.active === 'B' ? 1 : 0;
-
-    if (this.bufferA) {
-      this.sourceA = this.context.createBufferSource();
-      this.sourceA.buffer = this.bufferA;
-      this.sourceA.connect(this.gainA);
-      this.sourceA.start(0, this.offset);
-    }
-    if (this.bufferB) {
-      this.sourceB = this.context.createBufferSource();
-      this.sourceB.buffer = this.bufferB;
-      this.sourceB.connect(this.gainB);
-      this.sourceB.start(0, this.offset);
-    }
-
-    this.startCtxTime = this.context.currentTime - this.offset;
+    this.stopSource();
     this.playing = true;
-
-    // When one of them ends, stop cleanly.
-    if (this.sourceB) {
-      this.sourceB.onended = () => {
-        if (this.playing && this.getCurrentTime() >= this.getDuration() - 0.05) {
-          this.playing = false;
-          this.offset = 0;
-        }
-      };
-    } else if (this.sourceA) {
-      this.sourceA.onended = () => {
-        if (this.playing && this.getCurrentTime() >= this.getDuration() - 0.05) {
-          this.playing = false;
-          this.offset = 0;
-        }
-      };
-    }
+    this.startActive();
   }
 
   pause(): void {
     if (!this.playing) return;
     this.offset = this.getCurrentTime();
-    this.teardown();
+    this.stopSource();
     this.playing = false;
   }
 
@@ -181,115 +164,107 @@ class ABEngine {
 
   seek(time: number): void {
     const wasPlaying = this.playing;
-    this.pause();
+    if (wasPlaying) {
+      this.stopSource();
+      this.playing = false;
+    }
     this.offset = Math.max(0, Math.min(this.getDuration(), time));
-    if (wasPlaying) this.play();
+    if (wasPlaying) {
+      this.playing = true;
+      this.startActive();
+    }
   }
 
   switchTo(side: 'A' | 'B'): void {
+    if (side === this.active) return;
+    if (!this.playing) {
+      this.active = side;
+      return;
+    }
+    // Preserve current playhead, swap to the other buffer seamlessly.
+    const now = this.getCurrentTime();
+    this.stopSource();
     this.active = side;
-    if (!this.gainA || !this.gainB) return;
-    const t = this.context.currentTime;
-    this.gainA.gain.setTargetAtTime(side === 'A' ? 1 : 0, t, 0.01);
-    this.gainB.gain.setTargetAtTime(side === 'B' ? 1 : 0, t, 0.01);
+    this.offset = Math.max(0, Math.min(this.getDuration(), now));
+    this.startActive();
   }
 
   async close(): Promise<void> {
-    this.teardown();
+    this.stopSource();
     try { await this.context.close(); } catch {}
   }
 }
 
-// ─── Canvas visualizer (frequency + waveform modes) ──────────────────────────
-function SpectrumCanvas({
-  analyzer,
+import AudioMotionAnalyzer from 'audiomotion-analyzer';
+
+// ─── High-Res AudioMotion Visualizer ─────────────────────────────────────────
+function AudioMotionVisualizer({
+  engine,
   color,
   mode,
 }: {
-  analyzer: AnalyserNode | null;
+  engine: ABEngine | null;
   color: string;
   mode: 'frequency' | 'waveform';
 }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const rafRef = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const amRef = useRef<AudioMotionAnalyzer | null>(null);
 
+  // Initialize
   useEffect(() => {
-    if (!analyzer || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!engine || !containerRef.current) return;
 
-    const resize = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(canvas);
+    const am = new AudioMotionAnalyzer(containerRef.current, {
+      audioCtx: engine.context,
+      connectSpeakers: false,
+      useCanvas: true,
+      showScaleX: true,
+      showScaleY: true,
+      showPeaks: true,
+      overlay: true,
+      bgAlpha: 0,
+      showBgColor: false,
+      smoothing: 0.7,
+      minFreq: 20,
+      maxFreq: 20000,
+      fftSize: 8192,
+    });
 
-    const bins = analyzer.frequencyBinCount;
-    const data = new Uint8Array(bins);
+    am.connectInput(engine.gainNode);
+    amRef.current = am;
 
-    const tick = () => {
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      ctx.clearRect(0, 0, w, h);
-
-      if (mode === 'frequency') {
-        analyzer.getByteFrequencyData(data);
-        const barW = (w / bins) * 2.5;
-        let x = 0;
-        for (let i = 0; i < bins; i++) {
-          const bh = (data[i] / 255) * h;
-          const g = ctx.createLinearGradient(0, h, 0, h - bh);
-          g.addColorStop(0, color + '22');
-          g.addColorStop(1, color);
-          ctx.fillStyle = g;
-          ctx.fillRect(x, h - bh, barW, bh);
-          if (data[i] > 0) {
-            ctx.shadowBlur = 12;
-            ctx.shadowColor = color;
-            ctx.fillStyle = color;
-            ctx.fillRect(x, h - bh, barW, 2);
-            ctx.shadowBlur = 0;
-          }
-          x += barW + 1;
-          if (x > w) break;
-        }
-      } else {
-        analyzer.getByteTimeDomainData(data);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = color;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = color;
-        ctx.beginPath();
-        const slice = w / bins;
-        let x = 0;
-        for (let i = 0; i < bins; i++) {
-          const v = data[i] / 128.0;
-          const y = (v * h) / 2;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-          x += slice;
-        }
-        ctx.lineTo(w, h / 2);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-      }
-
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    tick();
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      ro.disconnect();
+      am.destroy();
+      amRef.current = null;
     };
-  }, [analyzer, color, mode]);
+  }, [engine]);
 
-  return <canvas ref={canvasRef} className="w-full h-full block" />;
+  // Update mode & color
+  useEffect(() => {
+    if (!amRef.current) return;
+    
+    // mode 6: 1/3rd octave bands (ledBars memory meter)
+    // mode 10: Line graph (waveform)
+    if (mode === 'frequency') {
+      amRef.current.setOptions({ mode: 6, ledBars: true, radial: false, fillAlpha: 0.8, lineWidth: 0 });
+    } else {
+      amRef.current.setOptions({ mode: 10, ledBars: false, radial: false, fillAlpha: 0, lineWidth: 2 });
+    }
+
+    const gradientName = color === '#6366f1' ? 'beforeColor' : 'afterColor';
+    amRef.current.registerGradient(gradientName, {
+      bgColor: '#00000000',
+      colorStops: [
+        { pos: 0, color: color },
+        { pos: 0.8, color: color + '66' },
+        { pos: 1, color: color + '11' }
+      ]
+    });
+    amRef.current.setOptions({ gradient: gradientName });
+
+  }, [mode, color]);
+
+  return <div ref={containerRef} className="w-full h-full block [&>canvas]:w-full [&>canvas]:h-full" />;
 }
 
 // ─── Segmented peak meter with peak-hold ─────────────────────────────────────
@@ -298,6 +273,7 @@ function PeakMeter({ level, label }: { level: number; label: string }) {
   const holdT = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (level > hold) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHold(level);
       if (holdT.current) clearTimeout(holdT.current);
       holdT.current = setTimeout(() => setHold(0), 1200);
@@ -347,8 +323,10 @@ export default function ABPlayer({ audioUrl, masteredUrl }: ABPlayerProps) {
     let eng: ABEngine | null = null;
     try {
       eng = new ABEngine();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEngine(eng);
     } catch (e) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError(e instanceof Error ? e.message : 'Web Audio unavailable');
     }
     return () => {
@@ -360,8 +338,11 @@ export default function ABPlayer({ audioUrl, masteredUrl }: ABPlayerProps) {
   useEffect(() => {
     if (!engine) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadedA(false);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadedB(false);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null);
 
     (async () => {
@@ -440,7 +421,6 @@ export default function ABPlayer({ audioUrl, masteredUrl }: ABPlayerProps) {
   const colorA = '#6366f1'; // indigo
   const colorB = '#10b981'; // emerald
   const color = useMemo(() => (active === 'A' ? colorA : colorB), [active]);
-  const analyzer = engine?.analyzer ?? null;
   const ready = loadedA && loadedB;
 
   if (error) {
@@ -453,22 +433,27 @@ export default function ABPlayer({ audioUrl, masteredUrl }: ABPlayerProps) {
   }
 
   return (
-    <div className="w-full rounded-xl border border-zinc-800 bg-zinc-950 overflow-hidden">
-      {/* Visualizer */}
-      <div className="relative aspect-[5/1] md:aspect-[6/1] w-full bg-black">
-        <div className="absolute top-3 left-4 z-10 flex items-center gap-2">
+    <div className="relative w-full rounded-xl border border-zinc-800 bg-zinc-950 overflow-hidden flex flex-col min-h-[280px]">
+      {/* Visualizer Background (Fluid Overlay) */}
+      <div className="absolute inset-0 z-0 opacity-60 pointer-events-none">
+        <AudioMotionVisualizer engine={engine} color={color} mode={vizMode} />
+      </div>
+
+      {/* Top Bar */}
+      <div className="relative z-10 flex justify-between items-start p-4 pointer-events-none">
+        <div className="flex items-center gap-2 bg-black/40 backdrop-blur-sm px-2 py-1 rounded-md border border-white/5">
           <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-red-500 animate-pulse' : 'bg-zinc-600'}`} />
-          <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
+          <span className="text-[10px] font-mono text-zinc-300 uppercase tracking-widest drop-shadow-md">
             {isPlaying ? 'live analysis' : ready ? 'standby' : 'loading…'}
           </span>
         </div>
-        <div className="absolute top-3 right-3 z-10 flex gap-1">
+        <div className="flex gap-1 pointer-events-auto">
           <button
             onClick={() => setVizMode('frequency')}
             className={`p-1.5 rounded-md transition-colors ${
               vizMode === 'frequency'
-                ? 'bg-zinc-100 text-black'
-                : 'bg-black/40 text-zinc-500 hover:text-zinc-200'
+                ? 'bg-zinc-100 text-black shadow-md'
+                : 'bg-black/40 text-zinc-400 hover:text-zinc-200 border border-white/5 backdrop-blur-sm'
             }`}
             aria-label="frequency view"
           >
@@ -478,29 +463,28 @@ export default function ABPlayer({ audioUrl, masteredUrl }: ABPlayerProps) {
             onClick={() => setVizMode('waveform')}
             className={`p-1.5 rounded-md transition-colors ${
               vizMode === 'waveform'
-                ? 'bg-zinc-100 text-black'
-                : 'bg-black/40 text-zinc-500 hover:text-zinc-200'
+                ? 'bg-zinc-100 text-black shadow-md'
+                : 'bg-black/40 text-zinc-400 hover:text-zinc-200 border border-white/5 backdrop-blur-sm'
             }`}
             aria-label="waveform view"
           >
             <Activity size={14} />
           </button>
         </div>
+      </div>
 
-        <SpectrumCanvas analyzer={analyzer} color={color} mode={vizMode} />
-
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-center pointer-events-none">
-          <div className="text-2xl md:text-3xl font-mono font-bold tabular-nums text-zinc-100">
-            {fmt(curTime)}
-          </div>
-          <div className="text-[9px] font-mono text-zinc-500 tracking-[0.2em] uppercase">
-            / {fmt(duration)}
-          </div>
+      {/* Center Time Display */}
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center pointer-events-none py-6">
+        <div className="text-4xl md:text-5xl font-mono font-bold tabular-nums text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
+          {fmt(curTime)}
+        </div>
+        <div className="text-[10px] font-mono text-zinc-300 tracking-[0.2em] uppercase mt-2 drop-shadow-md">
+          / {fmt(duration)}
         </div>
       </div>
 
       {/* Transport */}
-      <div className="grid grid-cols-12 gap-4 p-4 items-center">
+      <div className="relative z-10 grid grid-cols-12 gap-4 p-4 items-center bg-black/50 backdrop-blur-md border-t border-zinc-800/60">
         {/* Left: play controls */}
         <div className="col-span-12 md:col-span-7 flex items-center gap-4">
           <button

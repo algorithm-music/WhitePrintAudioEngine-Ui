@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Terminal, Copy, CheckCircle2 } from 'lucide-react';
 import MarketingHeader from '@/components/layout/marketing-header';
 
@@ -13,15 +13,21 @@ const ROUTE_OPTIONS = [
 
 export default function CurlGenPage() {
   const [copied, setCopied] = useState(false);
-  const [baseUrl, setBaseUrl] = useState('https://your-concertmaster-url.a.run.app');
+  const [baseUrl, setBaseUrl] = useState('https://aimastering.tech');
+
+  useEffect(() => {
+    if (window.location.hostname !== 'localhost') {
+      setBaseUrl(window.location.origin);
+    }
+  }, []);
   const [apiKey, setApiKey] = useState('your-api-key-here');
   const [audioUrl, setAudioUrl] = useState('https://www.dropbox.com/s/example/track.wav?dl=1');
   const [route, setRoute] = useState('full');
   const [targetLufs, setTargetLufs] = useState('-14.0');
   const [targetTruePeak, setTargetTruePeak] = useState('-1.0');
 
-  const curlCommand = `curl -X POST ${baseUrl}/api/v1/jobs/master \\
-  -H "X-Api-Key: ${apiKey}" \\
+  const curlCommand = `curl -X POST ${baseUrl}/api/master \\
+  -H "Authorization: Bearer wpk_${apiKey.replace(/^wpk_/, '')}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "audio_url": "${audioUrl}",
@@ -68,13 +74,13 @@ export default function CurlGenPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-mono text-zinc-500 mb-2">X-Api-Key</label>
+              <label className="block text-xs font-mono text-zinc-500 mb-2">API Key</label>
               <input 
                 type="text" 
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-300 font-mono focus:outline-none focus:border-indigo-500 transition-colors"
-                placeholder="your-api-key"
+                placeholder="wpk_..."
               />
             </div>
 
@@ -149,10 +155,12 @@ export default function CurlGenPage() {
             </pre>
           </div>
 
-          <div className="mt-auto p-4 bg-zinc-900/30 border-t border-zinc-800">
+          <div className="mt-auto p-4 bg-zinc-900/30 border-t border-zinc-800 space-y-4">
             <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg text-xs font-mono text-indigo-300">
-              <strong>Note:</strong> The <code>full</code> and <code>dsp_only</code> routes return <code>audio/wav</code> binary. Add <code>-o master.wav</code> to save the output file.
-              The <code>analyze_only</code> and <code>deliberation_only</code> routes return JSON.
+              <strong>非同期処理について:</strong><br />
+              このリクエストを送信すると、即座に <code>job_id</code> と <code>output_object</code> を含む JSON が返却されます。<br />
+              その後、 <code>GET {baseUrl}/api/jobs/&lt;job_id&gt;?object=&lt;output_object&gt;</code> にポーリングを行うことで、<br />
+              ステータスが <code>completed</code> になった際にダウンロードURLやメトリクスが取得できます。
             </div>
           </div>
         </div>

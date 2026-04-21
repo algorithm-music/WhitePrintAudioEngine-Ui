@@ -48,6 +48,8 @@ interface LocalRun {
   startedAt: number;
   /** Running wall-clock seconds since startedAt; flips to a download button on done. */
   elapsed: number;
+  /** High-resolution elapsed time in milliseconds for smooth progress bars. */
+  elapsedMs?: number;
   error?: string;
   /** Signed GET URL to the original upload (for the AB player's A side). */
   inputUrl?: string;
@@ -60,12 +62,6 @@ interface LocalRun {
   /** Backing GCS object name so /api/jobs/[id] can sign a download URL. */
   outputObject?: string | null;
   status: 'uploading' | 'processing' | 'done' | 'error';
-}
-
-function fmtElapsed(s: number) {
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
 const ACCEPTED_EXT = ['.wav', '.flac', '.aiff', '.aif', '.mp3'];
@@ -130,18 +126,18 @@ export default function DashboardPage() {
       setRuns((prev) =>
         prev.map((r) =>
           r.status === 'uploading' || r.status === 'processing'
-            ? { ...r, elapsed: r.elapsed + 1 }
+            ? { ...r, elapsed: Math.floor((Date.now() - r.startedAt) / 1000), elapsedMs: Date.now() - r.startedAt }
             : r,
         ),
       );
-    }, 1000);
+    }, 200);
     return () => clearInterval(t);
   }, [runs]);
 
   const startRun = useCallback(async (file: File) => {
     const localId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     setRuns((prev) => [
-      { localId, filename: file.name, startedAt: Date.now(), status: 'uploading', elapsed: 0 },
+      { localId, filename: file.name, startedAt: Date.now(), status: 'uploading', elapsed: 0, elapsedMs: 0 },
       ...prev,
     ]);
 
@@ -356,12 +352,43 @@ export default function DashboardPage() {
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-mono text-zinc-200">{r.filename}</div>
-                        <div className={`text-[10px] font-mono mt-0.5 ${doneColor}`}>
-                          {r.status === 'uploading' && 'uploading…'}
-                          {r.status === 'processing' && 'mastering (running in background)'}
-                          {r.status === 'done' && 'done · compare A / B below'}
-                          {r.status === 'error' && `error · ${r.error}`}
-                        </div>
+                        {spin ? (() => {
+                          const eMs = r.elapsedMs || 0;
+                          let progress = Math.floor(eMs / 200);
+                          if (progress > 99) progress = 99; // Cap at 99% until fully complete
+                          
+                          // Avoid 0 division and keep estimation sensible
+                          const estimatedTotal = progress > 0 ? (r.elapsed / (progress / 100)) : 20; 
+                          const remaining = Math.max(0, Math.round(estimatedTotal - r.elapsed));
+                          const fmtTime = (secs: number) => {
+                            const m = Math.floor(secs / 60).toString().padStart(2, '0');
+                            const s = Math.floor(secs % 60).toString().padStart(2, '0');
+                            return `${m}:${s}`;
+                          };
+                          
+                          return (
+                            <div className="mt-2 w-full max-w-sm space-y-1.5 font-mono pr-4">
+                              <div className="flex justify-between text-[9px] text-cyan-500/80">
+                                <span>ELAPSED: {fmtTime(r.elapsed)}</span>
+                                <span>ESTIMATED: {fmtTime(remaining)} REMAINING</span>
+                              </div>
+                              <div className="w-full bg-zinc-900 h-1 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-cyan-500 shadow-[0_0_8px_#06b6d4] transition-all duration-200"
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
+                              <div className="text-right text-[9px] text-cyan-400 italic">
+                                PROCESSING... {progress}%
+                              </div>
+                            </div>
+                          );
+                        })() : (
+                          <div className={`text-[10px] font-mono mt-0.5 ${doneColor}`}>
+                            {r.status === 'done' && 'done · compare A / B below'}
+                            {r.status === 'error' && `error · ${r.error}`}
+                          </div>
+                        )}
                       </div>
 
                       {canCompare && (
@@ -401,17 +428,7 @@ export default function DashboardPage() {
                             >
                               {r.error}
                             </motion.div>
-                          ) : (
-                            <motion.div
-                              key="count"
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0 }}
-                              className="absolute inset-0 flex items-center justify-end font-mono tabular-nums text-zinc-400 pr-1"
-                            >
-                              {fmtElapsed(r.elapsed)}
-                            </motion.div>
-                          )}
+                          ) : null}
                         </AnimatePresence>
                       </div>
 

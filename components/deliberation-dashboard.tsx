@@ -10,9 +10,10 @@ interface DeliberationDashboardProps {
   data: DeliberationOutput;
   onRunMastering?: () => void;
   onReset?: () => void;
+  error?: string | null;
 }
 
-export default function DeliberationDashboard({ data, onRunMastering, onReset }: DeliberationDashboardProps) {
+export default function DeliberationDashboard({ data, onRunMastering, onReset, error }: DeliberationDashboardProps) {
   const [viewMode, setViewMode] = useState<'visual' | 'json'>('visual');
 
   return (
@@ -31,6 +32,12 @@ export default function DeliberationDashboard({ data, onRunMastering, onReset }:
           )}
         </div>
         <div className="flex items-center gap-4">
+          {error && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 text-xs font-mono animate-pulse">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {error}
+            </div>
+          )}
           {onRunMastering && (
             <button
               onClick={onRunMastering}
