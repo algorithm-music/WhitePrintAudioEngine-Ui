@@ -149,14 +149,22 @@ export async function POST(request: NextRequest) {
       outputFusePath = objectToFusePath(outputObject);
     }
 
-    const cmBody: Record<string, unknown> = {
-      route,
-      target_lufs: body.target_lufs,
-      target_true_peak: body.target_true_peak,
-      sage_config: body.sage_config,
-      dsp_config: body.dsp_config,
-      manual_params: body.manual_params,
-    };
+    // Only forward fields the caller actually set — passing `undefined`
+    // serializes fine, but it makes the Concertmaster log noisy and hides
+    // UI bugs where a required param silently disappears (see 6cd254b,
+    // when /app shipped with no target_lufs at all).
+    const cmBody: Record<string, unknown> = { route };
+    const forward = [
+      'platform',          // Sage deliberation context (e.g. "spotify")
+      'target_lufs',       // only when the caller explicitly overrides
+      'target_true_peak',  // only when the caller explicitly overrides
+      'sage_config',
+      'dsp_config',
+      'manual_params',
+    ] as const;
+    for (const key of forward) {
+      if (body[key] !== undefined) cmBody[key] = body[key];
+    }
     if (gcsObject) {
       cmBody.input_path = objectToFusePath(gcsObject);
     } else if (audioUrl) {
@@ -167,9 +175,20 @@ export async function POST(request: NextRequest) {
     }
 
     const targetUrl = `${CONCERTMASTER_URL}/api/v1/jobs/master`;
-    console.log(
-      `[master] submit → ${targetUrl} | gcs_object=${gcsObject ?? '(none)'} | output_object=${outputObject ?? '(none)'}`,
-    );
+    // Dump what we forward so regressions like "UI stopped sending params"
+    // show up in Vercel logs immediately instead of only via bad audio.
+    const paramSummary = {
+      route,
+      platform: cmBody.platform ?? '(sage-default)',
+      target_lufs: cmBody.target_lufs ?? '(sage-decides)',
+      target_true_peak: cmBody.target_true_peak ?? '(sage-decides)',
+      has_manual_params: !!cmBody.manual_params,
+      has_sage_config: !!cmBody.sage_config,
+      has_dsp_config: !!cmBody.dsp_config,
+      input: gcsObject ? `fuse:${objectToFusePath(gcsObject)}` : audioUrl ? `url:${audioUrl.slice(0, 80)}…` : '(none)',
+      output_object: outputObject ?? '(none)',
+    };
+    console.log(`[master] submit → ${targetUrl}`, JSON.stringify(paramSummary));
 
     let response: Response;
     try {

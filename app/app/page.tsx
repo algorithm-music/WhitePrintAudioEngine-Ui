@@ -63,6 +63,12 @@ interface LocalRun {
   jobId?: string;
   /** Backing GCS object name so /api/jobs/[id] can sign a download URL. */
   outputObject?: string | null;
+  /** LUFS target the Sage panel chose for this track (visible sanity check). */
+  sageTargetLufs?: number;
+  /** True-Peak target the Sage panel chose for this track. */
+  sageTargetTruePeak?: number;
+  /** Platform id the run was deliberated against. */
+  platformId?: string;
   status: 'uploading' | 'processing' | 'done' | 'error';
 }
 
@@ -180,6 +186,9 @@ export default function DashboardPage() {
       updateRun(localId, {
         jobId: submit.job_id,
         outputObject: submit.output_object,
+        sageTargetLufs: deliberation.target_lufs,
+        sageTargetTruePeak: deliberation.target_true_peak,
+        platformId: platformNow,
       });
       // The polling effect below takes over from here — no long-lived
       // fetch, so a flaky CDN / browser timeout can't kill the run.
@@ -453,7 +462,15 @@ export default function DashboardPage() {
                           );
                         })() : (
                           <div className={`text-[10px] font-mono mt-0.5 ${doneColor}`}>
-                            {r.status === 'done' && 'done · compare A / B below'}
+                            {r.status === 'done' && (
+                              <>
+                                done
+                                {r.platformId && ` · ${r.platformId}`}
+                                {typeof r.sageTargetLufs === 'number' && ` · sage→${r.sageTargetLufs} LUFS`}
+                                {typeof r.sageTargetTruePeak === 'number' && ` / ${r.sageTargetTruePeak} dBTP`}
+                                {' · compare A / B below'}
+                              </>
+                            )}
                             {r.status === 'error' && `error · ${r.error}`}
                           </div>
                         )}

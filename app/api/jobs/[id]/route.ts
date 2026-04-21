@@ -93,12 +93,26 @@ export async function GET(
         console.error('[jobs] failed to sign download URL:', err);
       }
     }
+    // Surface what Sage actually chose so we can detect "-14 LUFS on every
+    // track" regressions from logs without having to listen to the output.
+    const deliberation = (result.deliberation || {}) as Record<string, unknown>;
+    const metrics = (result.dsp_metrics || result.metrics || {}) as Record<string, unknown>;
+    console.log(
+      `[jobs] ${jobId} completed`,
+      JSON.stringify({
+        route: data.route || result.route,
+        sage_target_lufs: deliberation.target_lufs ?? null,
+        sage_target_true_peak: deliberation.target_true_peak ?? null,
+        lufs_after: metrics.lufs_after ?? null,
+        true_peak_after: metrics.true_peak_after ?? null,
+      }),
+    );
     return NextResponse.json({
       job_id: data.job_id,
       status: 'completed',
       route: data.route || result.route,
       download_url: downloadUrl,
-      metrics: result.dsp_metrics || result.metrics || {},
+      metrics,
       analysis: result.analysis,
       deliberation: result.deliberation,
       elapsed_ms: result.elapsed_ms,
