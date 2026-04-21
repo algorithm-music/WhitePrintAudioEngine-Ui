@@ -16,7 +16,6 @@ import {
   X,
 } from 'lucide-react';
 import { submitMasterJob, pollJob, uploadToGCS, ApiError } from '@/lib/api-client';
-import { runDeliberation } from '@/lib/deliberation';
 import ABPlayer from '@/components/ab-player';
 import PlatformSelector, { PLATFORMS } from '@/components/platform-selector';
 
@@ -161,34 +160,30 @@ export default function DashboardPage() {
       const gcsUrl = await uploadToGCS(file);
       updateRun(localId, { status: 'processing', inputUrl: gcsUrl });
 
-      // Sage deliberation must run before the DSP stage. Without it the
-      // backend falls back to generic defaults and the output audibly
-      // regresses vs. the narrative flow (manual_params + per-track
-      // loudness targets chosen by the AI panel).
-      //
-      // We forward only the platform id as context — Sage decides the
-      // loudness / true-peak targets. `custom` is the one platform where
-      // the UI supplies explicit numeric overrides.
+      // Single-call pipeline. The two-step (deliberation_only → dsp_only)
+      // path produced audibly bad output — clipping + muddy — likely
+      // because `dsp_only` applies Sage's adopted_params statically and
+      // skips the gain-convergence loop that hits the LUFS target safely.
+      // Dynamic per-section overrides (deliberation.dynamic_mastering_sections)
+      // are also dropped on that path. Route everything through the
+      // backend's `full` pipeline in one shot and only hand it the
+      // platform context; Sage + DSP stay in the same process on the
+      // Concertmaster side, with nothing getting lost in transit.
       const { platform: platformNow, customOverride: overrideNow } = platformRef.current;
-      const deliberation = await runDeliberation(gcsUrl, {
-        platform: platformNow,
-        targetLufs: overrideNow?.lufs,
-        targetTruePeak: overrideNow?.truePeak,
-      });
-
       const submit = await submitMasterJob({
         audio_url: gcsUrl,
-        route: 'dsp_only',
-        manual_params: deliberation.adopted_params,
-        target_lufs: deliberation.target_lufs,
-        target_true_peak: deliberation.target_true_peak,
+        route: 'full',
+        platform: platformNow,
+        ...(overrideNow
+          ? { target_lufs: overrideNow.lufs, target_true_peak: overrideNow.truePeak }
+          : {}),
       });
       updateRun(localId, {
         jobId: submit.job_id,
         outputObject: submit.output_object,
-        sageTargetLufs: deliberation.target_lufs,
-        sageTargetTruePeak: deliberation.target_true_peak,
         platformId: platformNow,
+        sageTargetLufs: overrideNow?.lufs,
+        sageTargetTruePeak: overrideNow?.truePeak,
       });
       // The polling effect below takes over from here — no long-lived
       // fetch, so a flaky CDN / browser timeout can't kill the run.
@@ -225,10 +220,25 @@ export default function DashboardPage() {
             const job = await pollJob(r.jobId, r.outputObject ?? null);
             if (cancelled) return;
             if (job.status === 'completed') {
+              // Sage targets live inside the deliberation payload when the
+              // backend runs route:'full'. Surface them so the completed
+              // row shows the per-track LUFS/dBTP the panel actually chose.
+              const deliberation = (job.deliberation ?? {}) as {
+                target_lufs?: number;
+                target_true_peak?: number;
+              };
               updateRun(r.localId, {
                 status: 'done',
                 downloadUrl: job.download_url ?? undefined,
                 expanded: true,
+                sageTargetLufs:
+                  typeof deliberation.target_lufs === 'number'
+                    ? deliberation.target_lufs
+                    : undefined,
+                sageTargetTruePeak:
+                  typeof deliberation.target_true_peak === 'number'
+                    ? deliberation.target_true_peak
+                    : undefined,
               });
               void refreshJobs();
             } else if (job.status === 'failed') {
