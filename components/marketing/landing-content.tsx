@@ -7,7 +7,7 @@ const features = [
     title: 'AI Reads Your Sound',
     subtitle: 'BS.1770-4 Physical Analysis',
     description:
-      'Loudness, true peak, dynamics, spectral balance, stereo width. Broadcast-standard measurement exposes the truth of your audio in hard numbers.',
+      'Loudness, true peak, dynamics, spectral balance, stereo width, genre detection. Broadcast-standard BS.1770-4 measurement exposes the truth of your audio in hard numbers.',
     href: '/features/analysis',
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -19,7 +19,7 @@ const features = [
     title: '3 AIs Deliberate. Then Decide.',
     subtitle: 'Multi-LLM Ensemble Engine',
     description:
-      'OpenAI, Anthropic, Google. Three independent AIs analyze your track, debate the parameters, and reach consensus. Every recommendation, every rationale — visible.',
+      'GPT-5.4, Claude Opus 4-7, Gemini 3.1 Pro. Three independent AIs analyze your track, debate 42 parameters, and reach consensus. Every recommendation, every rationale — visible.',
     href: '/features/deliberation',
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -31,7 +31,7 @@ const features = [
     title: 'Mastering That Moves With the Music',
     subtitle: 'AI Dynamic DSP Chain',
     description:
-      'Intro, verse, chorus, outro — different EQ, compression, and limiting for each section. Not static one-size-fits-all. Dynamic mastering that follows your song.',
+      'Intro, verse, chorus, outro — different EQ, compression, saturation, and limiting for each section. Genre-adaptive mastering targeting global chart Top 10 quality. Dynamic mastering that follows your song.',
     href: '/features/mastering',
     icon: (
       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -44,7 +44,7 @@ const features = [
 const stats = [
   { value: 'BS.1770-4', label: 'Broadcast Standard' },
   { value: '3 AIs', label: 'Deliberate Together' },
-  { value: '25+', label: 'DSP Parameters' },
+  { value: '42', label: 'DSP Parameters' },
   { value: 'REST API', label: 'Full Automation' },
 ];
 
@@ -72,7 +72,7 @@ export default function LandingContent({ onSubmit, error }: { onSubmit: (url: st
                 </span>
               </h1>
               <p className="text-lg text-zinc-400 max-w-2xl mx-auto leading-relaxed">
-                Three AI models independently analyze your audio, debate the ideal parameters,
+                Three AI models (GPT-5.4 · Claude Opus 4-7 · Gemini 3.1 Pro) independently analyze your audio, debate 42 parameters,
                 and reach consensus — section by section. Every decision is transparent.
                 <br />
                 Black-box mastering is over.

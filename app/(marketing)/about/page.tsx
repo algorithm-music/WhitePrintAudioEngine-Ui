@@ -12,8 +12,8 @@ export const metadata: Metadata = {
 
 const TECH_STACK = [
   { category: 'Frontend', items: ['Next.js 15.5', 'React 19', 'Tailwind CSS 4', 'Framer Motion'] },
-  { category: 'Backend', items: ['Python 3.12', 'FastAPI', 'NumPy / SciPy', 'httpx'] },
-  { category: 'AI / LLM', items: ['OpenAI GPT-4o', 'Anthropic Claude', 'Google Gemini 2.5', 'Vertex AI'] },
+  { category: 'Backend', items: ['Python 3.12', 'FastAPI', 'NumPy / SciPy', 'Spotify Pedalboard (JUCE)'] },
+  { category: 'AI / LLM', items: ['OpenAI GPT-5.4', 'Anthropic Claude Opus 4-7', 'Google Gemini 3.1 Pro', 'Vertex AI'] },
   { category: 'Infrastructure', items: ['Google Cloud Run', 'Cloud Storage (GCS)', 'Supabase Auth + DB', 'Cloud Build CI/CD'] },
 ];
 
@@ -33,14 +33,14 @@ const PIPELINE_STEPS = [
   {
     step: '03',
     title: 'TRIVIUM 3-Sage Deliberation',
-    desc: '3つの独立AIエージェント (OpenAI / Anthropic / Google) が並列で最適なDSPパラメータを提案。',
-    detail: '加重中央値マージにより24パラメータを決定。セクション別オーバーライドで楽曲構造に応じた動的処理を適用。',
+    desc: '3つの独立AIエージェント (GPT-5.4 / Claude Opus 4-7 / Gemini 3.1 Pro) が並列で最適なDSPパラメータを提案。',
+    detail: '加重中央値マージにより42パラメータ (EQ周波数/Q値、コンプ、リミッター、サチュレーション、ステレオ、パラレル) を決定。セクション別オーバーライドで楽曲構造に応じた動的処理を適用。検出ジャンルに基づくチャートトップ10品質のマスタリング。',
   },
   {
     step: '04',
-    title: '14-Stage DSP Mastering',
-    desc: 'アナログモデリング14段チェーン: EQ → M/S → Saturation → Compression → Limiting → Dither。',
-    detail: '3パス収束ループでターゲットLUFSに正確到達。Koren真空管モデル、4x OS True Peak Limiter v3搭載。',
+    title: '14-Stage Hybrid DSP Mastering (v3.1)',
+    desc: 'Spotify Pedalboard (JUCE C++) + Python ハイブリッド14段チェーン: Saturation → M/S → Dynamic EQ → Parametric EQ → Compressor → Limiter → Dither。',
+    detail: '5パス収束ループでターゲットLUFSに正確到達。Koren真空管モデル、テープエミュレーション、パラレルドライブ搭載。全パラメータはニュートラル（バイパス）がデフォルト — AIが決定しない限り何も加工しない「実行専用エンジン」。',
   },
   {
     step: '05',
@@ -68,15 +68,15 @@ const SERVICES = [
   {
     name: 'Deliberation',
     role: 'TRIVIUM 合議エンジン (AI Council)',
-    desc: '3つの独立AIエージェント (Grammatica / Logica / Rhetorica) が異なるLLMプロバイダーで並列実行し、加重中央値マージで最適DSPパラメータを決定。',
+    desc: 'GRAMMATICA (GPT-5.4 / Physics), LOGICA (Claude Opus 4-7 / Structure), RHETORICA (Gemini 3.1 Pro / Aesthetics) が42パラメータを独立提案し、加重中央値マージで最適値を決定。検出ジャンルに基づくグローバルチャートTop10品質のマスタリングを指向。',
     tech: 'Python / OpenAI / Anthropic / Vertex AI',
     icon: '🧠',
   },
   {
     name: 'Rendition-DSP',
-    role: 'マスタリングエンジン (DSP Engine)',
-    desc: 'Pure Python実装の14段アナログモデリングDSPチェーン。3パス収束ループ、LR8クロスオーバー4バンド圧縮、4x OS True Peak Limiter v3を搭載。',
-    tech: 'Python / NumPy / SciPy',
+    role: 'マスタリングエンジン (DSP Engine v3.1)',
+    desc: 'Spotify Pedalboard (JUCE C++) + Python ハイブリッド14段チェーン。Pedalboard: 4バンドEQ / Compressor / Limiter。Python: トランスフォーマーサチュレーション / 真空管エミュレーション / テープエミュレーション / M/S処理 / ダイナミックEQ / パラレルドライブ。全デフォルト値はニュートラル（バイパス）— AIが指示しない限り音声に一切の加工を行わない実行専用エンジン。',
+    tech: 'Python / Spotify Pedalboard (JUCE) / NumPy / SciPy',
     icon: '🎛️',
   },
   {

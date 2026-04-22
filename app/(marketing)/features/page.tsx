@@ -21,14 +21,14 @@ const featureCards = [
     description:
       'Three independent AI models analyze your track metrics and vote on optimal mastering parameters through an ensemble consensus mechanism.',
     href: '/features/deliberation',
-    highlights: ['OpenAI + Anthropic + Google', 'Ensemble Voting', 'Confidence Scores', 'Full Rationale'],
+    highlights: ['GPT-5.4 + Claude Opus 4-7 + Gemini 3.1 Pro', 'Ensemble Voting (42 Params)', 'Genre-Adaptive Mastering', 'Full Rationale'],
   },
   {
     title: 'Automated DSP Mastering',
     description:
-      'Professional-grade DSP chain with 25+ parameters applied automatically based on AI consensus. Download mastered WAV with before/after metrics.',
+      'Hybrid Pedalboard (JUCE C++) + Python DSP chain with 42 AI-determined parameters. Neutral-by-default: every stage is bypass until the AI instructs otherwise. Download mastered WAV with before/after metrics.',
     href: '/features/mastering',
-    highlights: ['EQ / Compression / Limiting', 'Saturation / Stereo', 'Before & After Metrics', 'WAV Download'],
+    highlights: ['14-Stage Hybrid Chain (v3.1)', 'Saturation / Tape / Tube Emulation', 'Genre-Adaptive Chart Top 10', 'Neutral-by-Default Architecture'],
   },
 ];
 
