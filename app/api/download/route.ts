@@ -21,13 +21,18 @@ export const maxDuration = 60;
  */
 export async function GET(request: NextRequest) {
   const objectPath = request.nextUrl.searchParams.get('path');
+  const directUrl = request.nextUrl.searchParams.get('url');
   const filename = request.nextUrl.searchParams.get('filename');
-  if (!objectPath) {
-    return NextResponse.json({ error: 'path is required' }, { status: 400 });
+  if (!objectPath && !directUrl) {
+    return NextResponse.json({ error: 'path or url is required' }, { status: 400 });
   }
 
   try {
-    const signedUrl = await generateDownloadUrl(objectPath, 60);
+    // Resolve the fetch URL: either sign a GCS object path, or use the
+    // pre-signed URL the caller already has.
+    const signedUrl = objectPath
+      ? await generateDownloadUrl(objectPath, 60)
+      : directUrl!;
 
     if (!filename) {
       // Playback path — let the browser fetch GCS directly.

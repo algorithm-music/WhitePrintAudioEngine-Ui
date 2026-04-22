@@ -503,7 +503,9 @@ export default function DashboardPage() {
                           {r.status === 'done' && (r.outputObject || r.downloadUrl) ? (
                             <motion.a
                               key="dl"
-                              href={r.outputObject ? `/api/download?path=${encodeURIComponent(r.outputObject)}&filename=${encodeURIComponent(r.filename.replace(/\.[^.]+$/, '') + '-mastered.wav')}` : r.downloadUrl!}
+                              href={r.outputObject
+                                ? `/api/download?path=${encodeURIComponent(r.outputObject)}&filename=${encodeURIComponent(r.filename.replace(/\.[^.]+$/, '') + '-mastered.wav')}`
+                                : `/api/download?url=${encodeURIComponent(r.downloadUrl!)}&filename=${encodeURIComponent(r.filename.replace(/\.[^.]+$/, '') + '-mastered.wav')}`}
                               download={r.filename.replace(/\.[^.]+$/, '') + '-mastered.wav'}
                               initial={{ opacity: 0, y: 6, scale: 0.96 }}
                               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -579,7 +581,9 @@ export default function DashboardPage() {
                     </div>
                     {done && (j.output_gcs_path || j.output_url) && (
                       <a
-                        href={j.output_gcs_path ? `/api/download?path=${encodeURIComponent(j.output_gcs_path)}&filename=${encodeURIComponent(outFilename)}` : (j.output_url || '')}
+                        href={j.output_gcs_path
+                          ? `/api/download?path=${encodeURIComponent(j.output_gcs_path)}&filename=${encodeURIComponent(outFilename)}`
+                          : `/api/download?url=${encodeURIComponent(j.output_url || '')}&filename=${encodeURIComponent(outFilename)}`}
                         download
                         className="flex items-center gap-1 text-xs font-mono text-emerald-400 hover:text-emerald-300 shrink-0"
                       >

@@ -238,7 +238,7 @@ export default function AuthDashboardContent({ user, onSubmit, error }: AuthDash
                             : (job.output_url || '');
                           const downloadHref = job.output_gcs_path
                             ? `/api/download?path=${encodeURIComponent(job.output_gcs_path)}&filename=${encodeURIComponent(getDisplayName(job).replace(/\.[^.]+$/, '') + '-mastered.wav')}`
-                            : (job.output_url || '');
+                            : `/api/download?url=${encodeURIComponent(job.output_url || '')}&filename=${encodeURIComponent(getDisplayName(job).replace(/\.[^.]+$/, '') + '-mastered.wav')}`;
                           return (
                             <div className="mt-4 space-y-3">
                               <ABPlayer audioUrl={job.input_gcs_path} masteredUrl={masteredUrl} />
