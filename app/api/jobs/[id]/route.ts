@@ -128,11 +128,12 @@ export async function GET(
     });
   }
 
-  // queued / processing
+  // queued / processing — include intermediate data if available
   return NextResponse.json({
     job_id: data.job_id,
     status: data.status,
     stage: data.stage,
     route: data.route,
+    intermediate: (data as Record<string, unknown>).intermediate ?? null,
   });
 }

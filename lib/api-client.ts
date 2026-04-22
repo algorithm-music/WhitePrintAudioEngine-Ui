@@ -86,6 +86,15 @@ export interface JobStatus<TResult = Record<string, unknown>> {
   elapsed_ms?: number;
   error?: string;
   http_status?: number;
+  intermediate?: {
+    track_identity?: Record<string, unknown>;
+    metrics?: Record<string, number | string | null>;
+    guardrails?: Record<string, unknown>;
+    problem_count?: number;
+    adopted_params?: Record<string, unknown>;
+    target_lufs?: number;
+    target_true_peak?: number;
+  } | null;
 }
 
 /**
