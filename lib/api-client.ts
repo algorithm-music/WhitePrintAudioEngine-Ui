@@ -164,7 +164,10 @@ export async function pollJob(
     }
     const lower = message.toLowerCase();
     if (lower.includes('timeout') || lower.includes('timed out')) {
-      message = 'Processing timed out. Try a shorter track.';
+      // Keep stage info if the backend included it, otherwise fallback
+      if (!lower.includes('stage')) {
+        message = 'Processing timed out. Try a shorter track.';
+      }
     }
     throw new ApiError(message, res.status);
   }
@@ -173,7 +176,9 @@ export async function pollJob(
   if (job.status === 'failed' && job.error) {
     const lower = job.error.toLowerCase();
     if (lower.includes('timeout') || lower.includes('timed out')) {
-      job.error = 'Processing timed out. Try a shorter track.';
+      if (!lower.includes('stage')) {
+        job.error = 'Processing timed out. Try a shorter track.';
+      }
     }
   }
   return job;
