@@ -505,6 +505,45 @@ export default function DashboardPage() {
                                     ▸ LIVE PIPELINE DATA (AI-generated · no hardcoded values)
                                   </div>
 
+                                  {/* Track Identity from Vertex AI */}
+                                  {im.track_identity && (() => {
+                                    const ti = im.track_identity as Record<string, unknown>;
+                                    return (
+                                      <div className="col-span-full flex flex-wrap gap-x-4 gap-y-1 mb-1 pb-1.5 border-b border-cyan-900/20">
+                                        {ti.bpm != null && (
+                                          <div>
+                                            <span className="text-zinc-600">BPM</span>{' '}
+                                            <span className="text-cyan-200 font-bold">{String(ti.bpm)}</span>
+                                            <span className={`ml-1 text-[8px] px-1 rounded ${ti.bpm_source === 'vertex-ai' ? 'bg-emerald-900/40 text-emerald-400' : 'bg-zinc-800 text-zinc-500'}`}>
+                                              {String(ti.bpm_source || 'dsp').toUpperCase()}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {ti.key != null && (
+                                          <div>
+                                            <span className="text-zinc-600">KEY</span>{' '}
+                                            <span className="text-cyan-200 font-bold">{String(ti.key)}</span>
+                                            <span className={`ml-1 text-[8px] px-1 rounded ${ti.key_source === 'vertex-ai' ? 'bg-emerald-900/40 text-emerald-400' : 'bg-zinc-800 text-zinc-500'}`}>
+                                              {String(ti.key_source || 'dsp').toUpperCase()}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {ti.genre != null && (
+                                          <div>
+                                            <span className="text-zinc-600">GENRE</span>{' '}
+                                            <span className="text-violet-300 font-bold">{String(ti.genre)}</span>
+                                          </div>
+                                        )}
+                                        {ti.mood != null && (
+                                          <div>
+                                            <span className="text-zinc-600">MOOD</span>{' '}
+                                            <span className="text-amber-300 font-bold">{String(ti.mood)}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+
                                   {/* Measured Metrics */}
                                   {im.metrics && (
                                     <>
