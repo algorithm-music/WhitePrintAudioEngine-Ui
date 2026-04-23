@@ -4,7 +4,7 @@ import { makeObjectName, objectToFusePath } from '@/lib/gcs';
 
 const CONCERTMASTER_URL = (
   process.env.CONCERTMASTER_URL ||
-  'https://whiteprintaudioengine-concertmaster-270124753853.asia-northeast1.run.app'
+  'https://whiteprintaudioengine-concertmaster-pdw36wmy5q-an.a.run.app'
 )
   .replace(/\\r\\n|\\r|\\n|\r|\n/g, '')
   .trim()

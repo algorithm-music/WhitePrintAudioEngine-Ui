@@ -23,9 +23,9 @@ ENV NEXT_PUBLIC_BASE_URL=$NEXT_PUBLIC_BASE_URL
 
 # Runtime env vars (server-side, injected at deploy time via Cloud Run env vars)
 ENV CONCERTMASTER_URL=https://whiteprintaudioengine-concertmaster-pdw36wmy5q-an.a.run.app
-ENV AUDITION_URL=https://whiteprintaudioengine-audition-git-270124753853.asia-northeast1.run.app
-ENV DELIBERATION_URL=https://whiteprintaudioengine-deliberation-270124753853.asia-northeast1.run.app
-ENV RENDITION_DSP_URL=https://whiteprintaudioengine-rendition-dsp-270124753853.asia-northeast1.run.app
+ENV AUDITION_URL=https://whiteprintaudioengine-audition-pdw36wmy5q-an.a.run.app
+ENV DELIBERATION_URL=https://whiteprintaudioengine-deliberation-pdw36wmy5q-an.a.run.app
+ENV RENDITION_DSP_URL=https://whiteprintaudioengine-rendition-dsp-pdw36wmy5q-an.a.run.app
 
 
 # Disable Next.js telemetry during build
