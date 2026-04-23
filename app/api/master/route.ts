@@ -306,7 +306,7 @@ function humanizeError(raw: unknown, status: number): string {
   if (status === 502 && (lower.includes('503') || lower.includes('service unavailable'))) {
     return 'The mastering engine is temporarily unavailable. Please try again in 30 seconds.';
   }
-  return raw;
+  return str;
 }
 
 async function incrementUsage(userId: string) {
