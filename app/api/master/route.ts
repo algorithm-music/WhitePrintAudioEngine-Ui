@@ -217,7 +217,8 @@ export async function POST(request: NextRequest) {
       let detail = `Backend error: ${response.status}`;
       try {
         const err = await response.json();
-        detail = err.detail || err.error || detail;
+        const raw = err.detail || err.error || detail;
+        detail = typeof raw === 'string' ? raw : JSON.stringify(raw);
       } catch {
         /* not json */
       }
@@ -283,8 +284,9 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function humanizeError(raw: string, status: number): string {
-  const lower = raw.toLowerCase();
+function humanizeError(raw: unknown, status: number): string {
+  const str = typeof raw === 'string' ? raw : String(raw);
+  const lower = str.toLowerCase();
 
   if (lower.includes('accounts.google.com') || lower.includes('servicelogin')) {
     return 'Cannot access this file. Please set Google Drive sharing to "Anyone with the link can view".';
