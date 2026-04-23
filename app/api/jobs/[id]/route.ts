@@ -5,6 +5,7 @@ const CONCERTMASTER_URL = (
   process.env.CONCERTMASTER_URL ||
   'https://whiteprintaudioengine-concertmaster-270124753853.asia-northeast1.run.app'
 )
+  .replace(/\\r\\n|\\r|\\n/g, '')
   .trim()
   .replace(/\/+$/, '');
 const CONCERTMASTER_API_KEY = (process.env.CONCERTMASTER_API_KEY || '').trim();

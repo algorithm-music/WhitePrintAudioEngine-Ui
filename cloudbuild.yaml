@@ -39,7 +39,7 @@ steps:
       - '--timeout'
       - '600'
       - '--set-env-vars'
-      - 'CONCERTMASTER_URL=https://concertmaster.aimastering.tech'
+      - 'CONCERTMASTER_URL=https://whiteprintaudioengine-concertmaster-pdw36wmy5q-an.a.run.app'
       - '--set-secrets'
       - 'CONCERTMASTER_API_KEY=CONCERTMASTER_API_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_KEY:latest'
       - '--quiet'
