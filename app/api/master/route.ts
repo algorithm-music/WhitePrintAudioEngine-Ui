@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { makeObjectName, objectToFusePath } from '@/lib/gcs';
 
-const CONCERTMASTER_URL = (
-  process.env.CONCERTMASTER_URL ||
+function cleanUrl(raw: string | undefined, fallback: string): string {
+  const v = (raw || '').trim() || fallback;
+  return v.replace(/[\r\n]+/g, '').replace(/\/+$/, '');
+}
+
+const CONCERTMASTER_URL = cleanUrl(
+  process.env.CONCERTMASTER_URL,
   'https://concertmaster.aimastering.tech'
-)
-  .replace(/\\r\\n|\\r|\\n|\r|\n/g, '')
-  .trim()
-  .replace(/\/+$/, '');
+);
 const CONCERTMASTER_API_KEY = (process.env.CONCERTMASTER_API_KEY || '').trim();
 
 const FREE_TRACKS_LIMIT = 3;
@@ -29,7 +31,7 @@ const FREE_TRACKS_LIMIT = 3;
  * The browser submits once, then polls every few seconds. No long-lived
  * connections, no keep-alive gymnastics.
  */
-export const maxDuration = 800;
+export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {

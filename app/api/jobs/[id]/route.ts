@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateDownloadUrl } from '@/lib/gcs';
 
-const CONCERTMASTER_URL = (
-  process.env.CONCERTMASTER_URL ||
+function cleanUrl(raw: string | undefined, fallback: string): string {
+  const v = (raw || '').trim() || fallback;
+  return v.replace(/[\r\n]+/g, '').replace(/\/+$/, '');
+}
+
+const CONCERTMASTER_URL = cleanUrl(
+  process.env.CONCERTMASTER_URL,
   'https://concertmaster.aimastering.tech'
-)
-  .replace(/\r\n|\r|\n|\r|\n/g, '')
-  .trim()
-  .replace(/\/+$/, '');
+);
 const CONCERTMASTER_API_KEY = (process.env.CONCERTMASTER_API_KEY || '').trim();
 
 export const dynamic = 'force-dynamic';
