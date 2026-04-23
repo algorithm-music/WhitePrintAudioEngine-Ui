@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { makeObjectName, objectToFusePath } from '@/lib/gcs';
+import { makeObjectName, generateDownloadUrl, generateUploadUrl } from '@/lib/gcs';
 
 function cleanUrl(raw: string | undefined, fallback: string): string {
   const v = (raw || '').trim() || fallback;
@@ -139,17 +139,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Allocate an output object in the same bucket so rendition-dsp can write
-    // it in place via its GCSFuse mount.
+    // Allocate an output object in the same bucket.
     let outputObject: string | null = null;
-    let outputFusePath: string | null = null;
     if (isMasteringRoute) {
       outputObject = makeObjectName(
         'outputs',
         user?.id ?? null,
         gcsObject ? gcsObject.split('/').pop() || 'master.wav' : 'master.wav',
       );
-      outputFusePath = objectToFusePath(outputObject);
+    }
+
+    // Concertmaster requires `audio_url` (HTTPS download URL) and accepts
+    // an optional `output_url` (signed PUT URL to write result to GCS).
+    // Generate signed URLs for GCS objects so the backend can fetch/write
+    // without needing bucket access itself.
+    let signedInputUrl: string | undefined;
+    let signedOutputUrl: string | undefined;
+    if (gcsObject) {
+      signedInputUrl = await generateDownloadUrl(gcsObject, 60);
+    }
+    if (outputObject) {
+      signedOutputUrl = await generateUploadUrl(outputObject, 'audio/wav', 60);
     }
 
     // Only forward fields the caller actually set — passing `undefined`
@@ -168,13 +178,10 @@ export async function POST(request: NextRequest) {
     for (const key of forward) {
       if (body[key] !== undefined) cmBody[key] = body[key];
     }
-    if (gcsObject) {
-      cmBody.input_path = objectToFusePath(gcsObject);
-    } else if (audioUrl) {
-      cmBody.audio_url = audioUrl;
-    }
-    if (outputFusePath) {
-      cmBody.output_path = outputFusePath;
+    // audio_url: signed GCS GET URL or user-provided external URL
+    cmBody.audio_url = signedInputUrl ?? audioUrl;
+    if (signedOutputUrl) {
+      cmBody.output_url = signedOutputUrl;
     }
 
     const targetUrl = `${CONCERTMASTER_URL}/api/v1/jobs/master`;
@@ -188,7 +195,7 @@ export async function POST(request: NextRequest) {
       has_manual_params: !!cmBody.manual_params,
       has_sage_config: !!cmBody.sage_config,
       has_dsp_config: !!cmBody.dsp_config,
-      input: gcsObject ? `fuse:${objectToFusePath(gcsObject)}` : audioUrl ? `url:${audioUrl.slice(0, 80)}…` : '(none)',
+      input: gcsObject ? `gcs:${gcsObject}` : audioUrl ? `url:${audioUrl.slice(0, 80)}…` : '(none)',
       output_object: outputObject ?? '(none)',
     };
     console.log(`[master] submit → ${targetUrl}`, JSON.stringify(paramSummary));
