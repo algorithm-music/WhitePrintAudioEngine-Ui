@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { makeObjectName, generateDownloadUrl, generateUploadUrl } from '@/lib/gcs';
+import { makeObjectName, objectToFusePath } from '@/lib/gcs';
 
 function cleanUrl(raw: string | undefined, fallback: string): string {
   const v = (raw || '').trim() || fallback;
@@ -139,27 +139,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Allocate an output object in the same bucket.
+    // Allocate an output object in the same bucket so rendition-dsp can write
+    // it in place via its GCSFuse mount.
     let outputObject: string | null = null;
+    let outputFusePath: string | null = null;
     if (isMasteringRoute) {
       outputObject = makeObjectName(
         'outputs',
         user?.id ?? null,
         gcsObject ? gcsObject.split('/').pop() || 'master.wav' : 'master.wav',
       );
-    }
-
-    // Concertmaster requires `audio_url` (HTTPS download URL) and accepts
-    // an optional `output_url` (signed PUT URL to write result to GCS).
-    // Generate signed URLs for GCS objects so the backend can fetch/write
-    // without needing bucket access itself.
-    let signedInputUrl: string | undefined;
-    let signedOutputUrl: string | undefined;
-    if (gcsObject) {
-      signedInputUrl = await generateDownloadUrl(gcsObject, 60);
-    }
-    if (outputObject) {
-      signedOutputUrl = await generateUploadUrl(outputObject, 'audio/wav', 60);
+      outputFusePath = objectToFusePath(outputObject);
     }
 
     // Only forward fields the caller actually set — passing `undefined`
@@ -178,10 +168,13 @@ export async function POST(request: NextRequest) {
     for (const key of forward) {
       if (body[key] !== undefined) cmBody[key] = body[key];
     }
-    // audio_url: signed GCS GET URL or user-provided external URL
-    cmBody.audio_url = signedInputUrl ?? audioUrl;
-    if (signedOutputUrl) {
-      cmBody.output_url = signedOutputUrl;
+    if (gcsObject) {
+      cmBody.input_path = objectToFusePath(gcsObject);
+    } else if (audioUrl) {
+      cmBody.audio_url = audioUrl;
+    }
+    if (outputFusePath) {
+      cmBody.output_path = outputFusePath;
     }
 
     const targetUrl = `${CONCERTMASTER_URL}/api/v1/jobs/master`;
@@ -195,7 +188,7 @@ export async function POST(request: NextRequest) {
       has_manual_params: !!cmBody.manual_params,
       has_sage_config: !!cmBody.sage_config,
       has_dsp_config: !!cmBody.dsp_config,
-      input: gcsObject ? `gcs:${gcsObject}` : audioUrl ? `url:${audioUrl.slice(0, 80)}…` : '(none)',
+      input: gcsObject ? `fuse:${objectToFusePath(gcsObject)}` : audioUrl ? `url:${audioUrl.slice(0, 80)}…` : '(none)',
       output_object: outputObject ?? '(none)',
     };
     console.log(`[master] submit → ${targetUrl}`, JSON.stringify(paramSummary));
@@ -236,23 +229,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const rawBody = await response.text();
-    console.log(`[master] raw CM response: ${rawBody.slice(0, 500)}`);
-    let data: Record<string, unknown>;
-    try {
-      data = JSON.parse(rawBody);
-    } catch {
-      console.error(`[master] CM response is not JSON`);
-      return NextResponse.json(
-        { error: 'Backend returned invalid response' },
-        { status: 502 },
-      );
-    }
-    // Concertmaster may return job_id or id — normalize
-    const jobId = (data.job_id ?? data.id ?? null) as string | null;
+    const data = (await response.json()) as {
+      job_id: string;
+      status: string;
+      route: string;
+    };
 
     // Save output_gcs_path and route to DB using Service Role Key to ensure it's written
-    if (jobId) {
+    if (data.job_id) {
       try {
         const { createClient: createAdminClient } = await import('@supabase/supabase-js');
         const adminSupabase = createAdminClient(
@@ -268,7 +252,7 @@ export async function POST(request: NextRequest) {
         await adminSupabase
           .from('jobs')
           .update(updatePayload)
-          .eq('id', jobId);
+          .eq('id', data.job_id);
       } catch (err) {
         console.error('Failed to update job details:', err);
       }
@@ -283,9 +267,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        job_id: jobId,
-        status: data.status as string,
-        route: (data.route as string) || route,
+        job_id: data.job_id,
+        status: data.status,
+        route: data.route || route,
         output_object: outputObject,
       },
       { status: 202 },
