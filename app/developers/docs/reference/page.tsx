@@ -17,14 +17,14 @@ export default function ReferencePage() {
       <section className="mt-12">
         <h2 className="text-xl font-bold text-white mb-4">Base URL</h2>
         <code className="block p-4 rounded-lg bg-zinc-950 border border-zinc-800 text-sm font-mono text-emerald-400">
-          https://concertmaster.aimastering.tech
+          https://www.aimastering.tech
         </code>
       </section>
 
       <section className="mt-12">
         <h2 className="text-xl font-bold text-white mb-4">Authentication</h2>
         <p className="text-sm text-zinc-400 mb-3">
-          All requests require an API key in the <code className="text-indigo-400">X-Api-Key</code> header.
+          All requests require an API key via the <code className="text-indigo-400">Authorization: Bearer wpk_...</code> header.
         </p>
       </section>
 

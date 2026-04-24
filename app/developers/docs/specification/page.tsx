@@ -20,7 +20,7 @@ const SERVICES = [
       { method: 'GET', path: '/health', desc: 'ヘルスチェック' },
     ],
     features: [
-      'X-Api-Key ヘッダー認証',
+      'External: Authorization: Bearer wpk_... / Internal: X-Api-Key',
       'SSRF保護 (プライベートIP/メタデータサーバーブロック)',
       'URL自動変換 (Google Drive / Dropbox / OneDrive / Suno / SoundCloud / yt-dlp)',
       'httpx 非同期コネクションプール',

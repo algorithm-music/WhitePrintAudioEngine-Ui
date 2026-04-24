@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { makeObjectName, objectToFusePath, generateDownloadUrl, generateUploadUrl } from '@/lib/gcs';
+import { makeObjectName, generateDownloadUrl, generateUploadUrl } from '@/lib/gcs';
 
 function cleanUrl(raw: string | undefined, fallback: string): string {
   const v = (raw || '').trim() || fallback;

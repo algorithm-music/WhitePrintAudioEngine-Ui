@@ -21,7 +21,7 @@ export default function QuickstartPage() {
           <p className="text-sm text-zinc-400">
             Sign up for a WhitePrint account and navigate to{' '}
             <strong className="text-zinc-200">Settings &rarr; API Keys</strong> to generate your key.
-            Include it as the <code className="text-indigo-400">X-Api-Key</code> header in all requests.
+            Include it as the <code className="text-indigo-400">Authorization: Bearer wpk_...</code> header in all requests.
           </p>
         </div>
 
