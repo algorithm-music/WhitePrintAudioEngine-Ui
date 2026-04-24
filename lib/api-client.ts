@@ -72,6 +72,12 @@ export interface SubmitMasterResponse {
   status: string;
   route: string;
   output_object: string | null;
+  // Sync-only fields (CM v00022+ returns results directly)
+  download_url?: string | null;
+  analysis?: Record<string, unknown>;
+  deliberation?: Record<string, unknown>;
+  metrics?: Record<string, unknown>;
+  elapsed_ms?: number;
 }
 
 export interface JobStatus<TResult = Record<string, unknown>> {
@@ -193,7 +199,21 @@ export async function pollJob(
 export async function postMaster<T>(body: Record<string, unknown>): Promise<T> {
   const submit = await submitMasterJob(body);
 
-  // Poll until terminal. Cap at ~30 min so a wedged job doesn't pin a tab.
+  // Sync path: CM v00022+ returns results directly with status=completed.
+  // No polling needed — return the results immediately.
+  if (submit.status === 'completed') {
+    return {
+      route: submit.route,
+      download_url: submit.download_url,
+      metrics: submit.metrics,
+      analysis: submit.analysis,
+      deliberation: submit.deliberation,
+      elapsed_ms: submit.elapsed_ms,
+    } as unknown as T;
+  }
+
+  // Async path: CM returned a job_id — poll until terminal.
+  // Cap at ~30 min so a wedged job doesn't pin a tab.
   const deadline = Date.now() + 30 * 60 * 1000;
   // eslint-disable-next-line no-constant-condition
   while (true) {

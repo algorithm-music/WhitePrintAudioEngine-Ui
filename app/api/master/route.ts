@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { makeObjectName, objectToFusePath } from '@/lib/gcs';
+import { makeObjectName, objectToFusePath, generateDownloadUrl, generateUploadUrl } from '@/lib/gcs';
 
 function cleanUrl(raw: string | undefined, fallback: string): string {
   const v = (raw || '').trim() || fallback;
@@ -16,20 +16,16 @@ const CONCERTMASTER_API_KEY = (process.env.CONCERTMASTER_API_KEY || '').trim();
 const FREE_TRACKS_LIMIT = 3;
 
 /**
- * Async submit.
+ * Proxy to Concertmaster's /api/v1/jobs/master.
  *
- * Up through commit `2b8cbc7` this route held the HTTP connection open for
- * the full 5-10 minute mastering run. That blew up intermittently — Vercel
- * Functions, the browser, and any CDN in between all have their own idle
- * timeouts, and at ~9 months of attempted shipping we've had enough
- * `TypeError: fetch failed` incidents to kill that pattern.
+ * Concertmaster (v00022+) is a **synchronous** API — it accepts
+ * `audio_url` (signed GET) and optionally `output_url` (signed PUT),
+ * runs the full pipeline, and returns results in a single response.
  *
- * New contract:
- *   POST /api/master        →  { job_id, output_object }          (202)
- *   GET  /api/jobs/{id}?object=…  →  { status, download_url? }     (poll)
- *
- * The browser submits once, then polls every few seconds. No long-lived
- * connections, no keep-alive gymnastics.
+ * If CM returns `job_id` (older async versions), the response is
+ * forwarded as-is for poll-based flow. If CM returns results directly
+ * (sync), we wrap them as a synthetic "completed" job so the UI can
+ * handle both seamlessly.
  */
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -139,23 +135,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Allocate an output object in the same bucket so rendition-dsp can write
-    // it in place via its GCSFuse mount.
+    // Allocate output object for mastering routes
     let outputObject: string | null = null;
-    let outputFusePath: string | null = null;
     if (isMasteringRoute) {
       outputObject = makeObjectName(
         'outputs',
         user?.id ?? null,
         gcsObject ? gcsObject.split('/').pop() || 'master.wav' : 'master.wav',
       );
-      outputFusePath = objectToFusePath(outputObject);
     }
 
-    // Only forward fields the caller actually set — passing `undefined`
-    // serializes fine, but it makes the Concertmaster log noisy and hides
-    // UI bugs where a required param silently disappears (see 6cd254b,
-    // when /app shipped with no target_lufs at all).
+    // Build Concertmaster request using signed GCS URLs.
+    // CM v00022+ expects `audio_url` (signed GET) instead of `input_path`.
     const cmBody: Record<string, unknown> = { route };
     const forward = [
       'platform',          // Sage deliberation context (e.g. "spotify")
@@ -168,18 +159,19 @@ export async function POST(request: NextRequest) {
     for (const key of forward) {
       if (body[key] !== undefined) cmBody[key] = body[key];
     }
+
+    // Generate signed GET URL for input audio
     if (gcsObject) {
-      cmBody.input_path = objectToFusePath(gcsObject);
+      cmBody.audio_url = await generateDownloadUrl(gcsObject, 60);
     } else if (audioUrl) {
       cmBody.audio_url = audioUrl;
     }
-    if (outputFusePath) {
-      cmBody.output_path = outputFusePath;
+    // Generate signed PUT URL for output (mastering routes only)
+    if (outputObject) {
+      cmBody.output_url = await generateUploadUrl(outputObject, 'audio/wav', 60);
     }
 
     const targetUrl = `${CONCERTMASTER_URL}/api/v1/jobs/master`;
-    // Dump what we forward so regressions like "UI stopped sending params"
-    // show up in Vercel logs immediately instead of only via bad audio.
     const paramSummary = {
       route,
       platform: cmBody.platform ?? '(sage-default)',
@@ -188,7 +180,7 @@ export async function POST(request: NextRequest) {
       has_manual_params: !!cmBody.manual_params,
       has_sage_config: !!cmBody.sage_config,
       has_dsp_config: !!cmBody.dsp_config,
-      input: gcsObject ? `fuse:${objectToFusePath(gcsObject)}` : audioUrl ? `url:${audioUrl.slice(0, 80)}…` : '(none)',
+      input: gcsObject ? `gcs:${gcsObject}` : audioUrl ? `url:${audioUrl.slice(0, 80)}…` : '(none)',
       output_object: outputObject ?? '(none)',
     };
     console.log(`[master] submit → ${targetUrl}`, JSON.stringify(paramSummary));
@@ -229,14 +221,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data = (await response.json()) as {
-      job_id: string;
-      status: string;
-      route: string;
-    };
+    const rawBody = await response.text();
+    console.log(`[master] raw CM response (${rawBody.length} bytes): ${rawBody.slice(0, 300)}`);
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(rawBody);
+    } catch {
+      console.error(`[master] CM response is not JSON`);
+      return NextResponse.json(
+        { error: 'Backend returned invalid response' },
+        { status: 502 },
+      );
+    }
 
-    // Save output_gcs_path and route to DB using Service Role Key to ensure it's written
-    if (data.job_id) {
+    // Normalize: CM may return job_id (async) or results directly (sync)
+    const jobId = (data.job_id ?? data.id ?? null) as string | null;
+
+    // Save output_gcs_path and route to DB
+    if (jobId) {
       try {
         const { createClient: createAdminClient } = await import('@supabase/supabase-js');
         const adminSupabase = createAdminClient(
@@ -252,27 +254,56 @@ export async function POST(request: NextRequest) {
         await adminSupabase
           .from('jobs')
           .update(updatePayload)
-          .eq('id', data.job_id);
+          .eq('id', jobId);
       } catch (err) {
         console.error('Failed to update job details:', err);
       }
     }
 
-    // Count the track as used at submit time. Jobs that later fail won't
-    // decrement, which is consistent with how the sync path behaved after
-    // completion — we choose the simpler, stateless variant.
+    // Count the track as used at submit time.
     if (isMasteringRoute && user) {
       await incrementUsage(user.id);
     }
 
+    // If CM returned a job_id, this is async — return 202 for polling.
+    if (jobId) {
+      return NextResponse.json(
+        {
+          job_id: jobId,
+          status: data.status as string,
+          route: (data.route as string) || route,
+          output_object: outputObject,
+        },
+        { status: 202 },
+      );
+    }
+
+    // Sync response: CM returned results directly.
+    // Generate download URL if output was written to GCS.
+    let downloadUrl: string | null = null;
+    if (outputObject) {
+      try {
+        downloadUrl = await generateDownloadUrl(outputObject, 60);
+      } catch {
+        console.warn('[master] Could not generate download URL for output');
+      }
+    }
+
+    // Wrap as a synthetic completed job for the UI's poll-based flow.
+    const syntheticId = `sync-${Date.now()}`;
     return NextResponse.json(
       {
-        job_id: data.job_id,
-        status: data.status,
-        route: data.route || route,
+        job_id: syntheticId,
+        status: 'completed',
+        route: (data.route as string) || route,
         output_object: outputObject,
+        download_url: downloadUrl,
+        analysis: data.analysis ?? data,
+        deliberation: data.deliberation,
+        metrics: data.metrics,
+        elapsed_ms: data.elapsed_ms,
       },
-      { status: 202 },
+      { status: 200 },
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown proxy error';
