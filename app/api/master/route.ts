@@ -236,14 +236,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data = (await response.json()) as {
-      job_id: string;
-      status: string;
-      route: string;
-    };
+    const rawBody = await response.text();
+    console.log(`[master] raw CM response: ${rawBody.slice(0, 500)}`);
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(rawBody);
+    } catch {
+      console.error(`[master] CM response is not JSON`);
+      return NextResponse.json(
+        { error: 'Backend returned invalid response' },
+        { status: 502 },
+      );
+    }
+    // Concertmaster may return job_id or id — normalize
+    const jobId = (data.job_id ?? data.id ?? null) as string | null;
 
     // Save output_gcs_path and route to DB using Service Role Key to ensure it's written
-    if (data.job_id) {
+    if (jobId) {
       try {
         const { createClient: createAdminClient } = await import('@supabase/supabase-js');
         const adminSupabase = createAdminClient(
@@ -259,7 +268,7 @@ export async function POST(request: NextRequest) {
         await adminSupabase
           .from('jobs')
           .update(updatePayload)
-          .eq('id', data.job_id);
+          .eq('id', jobId);
       } catch (err) {
         console.error('Failed to update job details:', err);
       }
@@ -274,9 +283,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        job_id: data.job_id,
-        status: data.status,
-        route: data.route || route,
+        job_id: jobId,
+        status: data.status as string,
+        route: (data.route as string) || route,
         output_object: outputObject,
       },
       { status: 202 },
